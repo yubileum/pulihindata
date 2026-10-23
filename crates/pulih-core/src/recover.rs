@@ -198,7 +198,9 @@ pub fn recover(
                                 return Err(e);
                             }
                         };
-                        if let Some(t) = f.modified.filter(|&t| t > 0) {
+                        // `modified` is local wall-clock time; the OS wants UTC.
+                        let utc = f.modified.map(|t| t - crate::bytes::local_offset());
+                        if let Some(t) = utc.filter(|&t| t > 0) {
                             let _ = file.set_modified(
                                 SystemTime::UNIX_EPOCH + Duration::from_secs(t as u64),
                             );

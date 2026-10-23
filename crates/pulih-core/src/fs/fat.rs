@@ -400,6 +400,7 @@ pub fn scan(src: &dyn ReadAt, vol: &Volume, ctx: &ScanCtx) -> io::Result<FsRepor
                     len,
                     sparse: false,
                 }]),
+                info: None,
             });
         }
     }

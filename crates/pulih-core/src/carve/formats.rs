@@ -2478,6 +2478,48 @@ fn elf(c: &mut Ctx) -> Option<Carve> {
     ok(end, "elf")
 }
 
+/// Every extension a signature's resolver can report.
+pub fn sig_exts(s: &Sig) -> &'static [&'static str] {
+    match s.name {
+        "JPEG" => &["jpg"],
+        "PNG" => &["png"],
+        "GIF" => &["gif"],
+        "BMP" => &["bmp"],
+        "TIFF / RAW" => &["tif", "cr2", "nef", "arw", "dng", "pef", "srw"],
+        "ORF" => &["orf"],
+        "RW2" => &["rw2"],
+        "RAF" => &["raf"],
+        "PSD" => &["psd", "psb"],
+        "RIFF (AVI/WAV/WEBP)" => &["avi", "wav", "webp"],
+        "AIFF" => &["aif"],
+        "MP4 / MOV / HEIC" => &[
+            "mp4", "mov", "m4a", "m4v", "3gp", "3g2", "heic", "avif", "cr3", "f4v",
+        ],
+        "MKV / WEBM" => &["mkv", "webm"],
+        "FLV" => &["flv"],
+        "WMV / WMA" => &["wmv", "wma"],
+        "MPEG-PS" => &["mpg"],
+        "MPEG-TS" => &["ts"],
+        "AVCHD MTS" => &["mts"],
+        "MP3 (ID3)" | "MP3" => &["mp3"],
+        "FLAC" => &["flac"],
+        "OGG / OPUS" => &["ogg", "opus", "ogv", "oga", "spx"],
+        "MIDI" => &["mid"],
+        "PDF" => &["pdf"],
+        "ZIP / Office / APK" => &[
+            "zip", "docx", "xlsx", "pptx", "vsdx", "odt", "ods", "odp", "odg", "epub", "apk", "jar",
+        ],
+        "DOC / XLS / PPT" => &["doc", "xls", "ppt", "vsd", "msg", "ole"],
+        "RTF" => &["rtf"],
+        "RAR" => &["rar"],
+        "7Z" => &["7z"],
+        "SQLite" => &["sqlite"],
+        "EXE / DLL" => &["exe", "dll", "sys"],
+        "ELF" => &["elf"],
+        _ => &[],
+    }
+}
+
 /// Leading magic bytes (and their offset) that a file with this extension
 /// must start with — used to validate guesses made from damaged metadata.
 pub fn magic_for_ext(ext: &str) -> Option<(&'static [u8], usize)> {
@@ -2491,7 +2533,9 @@ pub fn magic_for_ext(ext: &str) -> Option<(&'static [u8], usize)> {
         }
         "psd" | "psb" => (b"8BPS", 0),
         "pdf" => (b"%PDF-", 0),
-        "zip" | "docx" | "xlsx" | "pptx" | "odt" | "ods" | "odp" | "epub" | "apk" | "jar" => (b"PK\x03\x04", 0),
+        "zip" | "docx" | "xlsx" | "pptx" | "odt" | "ods" | "odp" | "epub" | "apk" | "jar" => {
+            (b"PK\x03\x04", 0)
+        }
         "doc" | "xls" | "ppt" | "msg" => (b"\xD0\xCF\x11\xE0", 0),
         "mp4" | "mov" | "m4a" | "m4v" | "3gp" | "heic" | "heif" | "avif" | "cr3" => (b"ftyp", 4),
         "mp3" => (b"ID3", 0),

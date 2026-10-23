@@ -236,6 +236,9 @@ pub struct ScanOptions {
     pub categories: u8,
     pub threads: usize,
     pub chunk_mb: usize,
+    /// Deep scan only these (canonical) extensions — see
+    /// [`crate::Target::wanted_exts`]. `None` = every supported type.
+    pub only_exts: Option<Vec<String>>,
 }
 
 impl Default for ScanOptions {
@@ -250,6 +253,7 @@ impl Default for ScanOptions {
                 .map_or(4, |n| n.get())
                 .min(8),
             chunk_mb: 16,
+            only_exts: None,
         }
     }
 }
@@ -390,6 +394,7 @@ fn run(src: &dyn ReadAt, opts: &ScanOptions, progress: &Progress, tx: &Sender<Sc
             categories: opts.categories,
             threads: opts.threads,
             chunk: opts.chunk_mb << 20,
+            only_exts: opts.only_exts.clone(),
         };
         let carved = carve(src, &ranges, &covered, &vols, &copts, &ctx);
         summary.carved = carved.len();

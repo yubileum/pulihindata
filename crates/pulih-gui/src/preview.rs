@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use crossbeam_channel::{unbounded, Receiver, Sender};
-use pulih_core::{read_head, Category, Device, FoundFile};
+use pulih_core::{inspect, read_head, Category, Device, FoundFile, Inspection};
 
 pub enum Preview {
     Image {
@@ -16,9 +16,11 @@ pub enum Preview {
     Hex(String),
 }
 
+pub type Msg = (u64, Preview, Inspection);
+
 pub struct Previewer {
-    tx: Sender<(u64, Preview)>,
-    pub rx: Receiver<(u64, Preview)>,
+    tx: Sender<Msg>,
+    pub rx: Receiver<Msg>,
 }
 
 impl Default for Previewer {
@@ -36,8 +38,16 @@ impl Previewer {
     pub fn request(&self, src: Arc<Device>, f: FoundFile, ctx: eframe::egui::Context) {
         let tx = self.tx.clone();
         std::thread::spawn(move || {
-            let p = build(&src, &f);
-            let _ = tx.send((f.id, p));
+            // What the content says about itself (title, text, date taken).
+            let ins = match f.category {
+                Category::Other | Category::Archive => Inspection::default(),
+                _ => inspect(&*src, &f, 3000),
+            };
+            let p = match &ins.text {
+                Some(t) => Preview::Text(t.clone()),
+                None => build(&src, &f),
+            };
+            let _ = tx.send((f.id, p, ins));
             ctx.request_repaint();
         });
     }

@@ -11,6 +11,7 @@
 //! (Aho-Corasick over all magics) is available for exotic cases.
 
 pub mod formats;
+pub mod meta;
 pub mod window;
 
 use std::collections::BTreeMap;
@@ -39,6 +40,8 @@ pub(crate) const WINDOW_CACHE: usize = (1 << 20) + (16 << 10);
 pub struct CarveOptions {
     pub byte_level: bool,
     pub categories: u8,
+    /// Only report these (canonical) extensions; `None` = every type.
+    pub only_exts: Option<Vec<String>>,
     pub threads: usize,
     pub chunk: usize,
 }
@@ -187,9 +190,18 @@ pub fn carve(
     opts: &CarveOptions,
     ctx: &ScanCtx,
 ) -> Vec<FoundFile> {
+    let wanted = |e: &str| {
+        opts.only_exts
+            .as_ref()
+            .is_none_or(|w| w.iter().any(|x| x == e))
+    };
+    // Looking for specific types only? Then only their signatures are
+    // tested at all — fewer candidates, fewer reads.
     let enabled: Vec<usize> = (0..SIGS.len())
         .filter(|&i| {
-            SIGS[i].cats & opts.categories != 0 && !(opts.byte_level && SIGS[i].aligned_only)
+            SIGS[i].cats & opts.categories != 0
+                && !(opts.byte_level && SIGS[i].aligned_only)
+                && formats::sig_exts(&SIGS[i]).iter().any(|e| wanted(e))
         })
         .collect();
     let dev = src.size();
@@ -309,13 +321,29 @@ pub fn carve(
                                 cov.insert(abs, abs + c.size);
                             }
                             let category = Category::from_ext(c.ext);
-                            if category.bit() & opts.categories == 0 {
+                            if category.bit() & opts.categories == 0 || !wanted(c.ext) {
                                 continue;
                             }
-                            let name = if abs.is_multiple_of(512) {
-                                format!("f{:09}.{}", abs / 512, c.ext)
-                            } else {
-                                format!("f{:09}_{}.{}", abs / 512, abs % 512, c.ext)
+                            // Read what the content says about itself
+                            // (title, date taken…) so the hit is findable.
+                            let w =
+                                Window::new(src, abs, &ch.buf[pos..ch.len], cache.take().unwrap());
+                            let mut cx = Ctx {
+                                w,
+                                stop: stopper,
+                                limit: c.size,
+                            };
+                            let m = catch_unwind(AssertUnwindSafe(|| {
+                                meta::describe(&mut cx, c.ext, c.size)
+                            }))
+                            .unwrap_or_default();
+                            cache = Some(cx.w.into_cache());
+                            let name = match &m.title {
+                                Some(t) => format!("{}.{}", crate::fs::sanitize_name(t), c.ext),
+                                None if abs.is_multiple_of(512) => {
+                                    format!("f{:09}.{}", abs / 512, c.ext)
+                                }
+                                None => format!("f{:09}_{}.{}", abs / 512, abs % 512, c.ext),
                             };
                             let f = FoundFile {
                                 id: ctx.next_id(),
@@ -324,7 +352,7 @@ pub fn carve(
                                 ext: c.ext.to_string(),
                                 category,
                                 size: c.size,
-                                modified: None,
+                                modified: m.time,
                                 origin: Origin::Carved,
                                 condition: match c.status {
                                     Status::Exact => Condition::Good,
@@ -337,6 +365,7 @@ pub fn carve(
                                     len: c.size,
                                     sparse: false,
                                 }]),
+                                info: m.info,
                             };
                             mine.push(f.clone());
                             batch.push(f);

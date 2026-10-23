@@ -166,7 +166,10 @@ fn parse_record(rec: &[u8], full: bool) -> Option<Record> {
             (0x10, false) => {
                 let v = resident_value(a)?;
                 r.si_ctime = v.u64le(0).unwrap_or(0);
-                r.si_mtime = v.u64le(8).and_then(filetime_to_unix);
+                r.si_mtime = v
+                    .u64le(8)
+                    .and_then(filetime_to_unix)
+                    .map(|t| t + crate::bytes::local_offset());
             }
             (0x30, false) => {
                 let v = resident_value(a)?;
@@ -180,7 +183,10 @@ fn parse_record(rec: &[u8], full: bool) -> Option<Record> {
                     Some((_, _, old)) => *old == 2 && ns != 2,
                 };
                 if better {
-                    r.fn_mtime = v.u64le(16).and_then(filetime_to_unix);
+                    r.fn_mtime = v
+                        .u64le(16)
+                        .and_then(filetime_to_unix)
+                        .map(|t| t + crate::bytes::local_offset());
                     r.name = Some((parent, name, ns));
                 }
             }
@@ -643,6 +649,7 @@ pub fn scan(src: &dyn ReadAt, vol: &Volume, ctx: &ScanCtx) -> io::Result<FsRepor
             condition,
             volume: vol.index,
             data,
+            info: None,
         });
     }
     report.found = emit(ctx, out, &keys);

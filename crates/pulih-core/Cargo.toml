@@ -11,6 +11,7 @@ authors.workspace = true
 memchr = "2"
 aho-corasick = "1"
 crossbeam-channel = "0.5"
+miniz_oxide = "0.8"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

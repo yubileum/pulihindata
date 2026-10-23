@@ -14,7 +14,7 @@ browser tertanam: satu file `.exe` sekitar 8 MB yang langsung jalan.
   box MP4, central directory ZIP, dsb.), jadi file hasil pulih tidak terpotong
   dan tidak berisi sampah di akhir.
 
-![Tampilan hasil pemindaian Pulih](docs/screenshot.png)
+![Mencari file "skripsi": hasil tersaring, isi dokumen tampil di pratinjau](docs/screenshot.png)
 
 
 ## Fitur
@@ -23,9 +23,11 @@ browser tertanam: satu file `.exe` sekitar 8 MB yang langsung jalan.
 |---|---|
 | **Pindai cepat (metadata)** | NTFS (seluruh MFT, termasuk file terfragmentasi, file kecil *resident*, dan folder yang ikut terhapus), FAT12/16/32 (nama panjang/LFN dipulihkan), exFAT. Nama, folder asal, dan tanggal asli tetap terjaga. |
 | **Pindai mendalam (signature)** | Mencari file dari isinya. Bisa dipakai pada drive yang sudah diformat, rusak, atau ber-filesystem lain (ext4, APFS, HFS+). Secara default hanya **ruang kosong** yang dipindai. |
+| **Cari file tertentu** | Sebelum memindai, isi nama file (wildcard `*`/`?` didukung; tanpa wildcard juga mencocokkan nama folder), pilih jenis spesifik (JPG, HEIC, RAW, MP4, DOCX, PDF, …), folder asal, rentang tanggal, dan ukuran. Hasil langsung tersaring, dan pencarian mendalam **hanya mencari jenis yang dipilih**, jadi lebih cepat. Di layar hasil, kriteria yang sama bisa diubah kapan saja, ditambah pohon folder asal. |
+| **Identitas dari isi file** | Hasil pencarian mendalam diberi nama dari isinya: judul dokumen Word/Excel/PowerPoint/ODF/PDF (atau kalimat pertamanya), "Artis - Judul" untuk MP3/FLAC. Foto diberi tanggal pengambilan (EXIF) dan model kamera; video diberi tanggal rekam. Jadi file tetap bisa dicari dengan nama dan tanggal walau metadata filesystem-nya sudah hilang. |
 | **Penilaian kondisi** | Setiap hasil diberi label *Baik / Tak pasti / Sebagian / Tertimpa*, dihitung dari bitmap alokasi dan tumpang-tindih antar file terhapus. |
 | **Partisi** | MBR (termasuk partisi extended), GPT (dengan nama partisi), atau volume langsung. Ruang di luar partisi (misalnya partisi yang terhapus) ikut dipindai. |
-| **Pratinjau** | Foto ditampilkan langsung (JPG, PNG, GIF, BMP, WEBP, TIFF); file lain ditampilkan sebagai teks atau hex. |
+| **Pratinjau** | Foto ditampilkan langsung (JPG, PNG, GIF, BMP, WEBP, TIFF) beserta tanggal EXIF dan kamera. Dokumen Office/ODF menampilkan **isi teksnya**, judul, dan tanggal simpan, untuk memastikan "ini file yang saya cari". File lain ditampilkan sebagai teks atau hex. |
 | **Sektor rusak** | Pembacaan tetap berjalan; sektor yang tidak terbaca diisi nol dan dihitung. |
 | **Bahasa** | Indonesia (default) dan Inggris. Tema terang/gelap. |
 
@@ -50,13 +52,28 @@ browser tertanam: satu file `.exe` sekitar 8 MB yang langsung jalan.
    tercepat lengkap dengan nama file. Pilih seluruh disk (`Disk 1 — …`) bila
    partisinya hilang atau terformat. File image (`.img`, `.dd`) juga bisa
    dibuka atau diseret ke jendela.
-3. **Pilih metode.** *Lengkap* (disarankan), *Cepat* (hanya metadata), atau
+3. **Apa yang dicari? (opsional).** Contoh:
+   - `skripsi` → semua file yang nama atau foldernya mengandung "skripsi",
+     termasuk dokumen hasil pencarian mendalam yang judulnya mengandung kata itu.
+   - `IMG_2024*.jpg` → nama yang persis cocok dengan pola.
+   - Pilih jenis **DOCX** + **PDF**, folder `Kuliah`, tanggal "1 tahun terakhir".
+   Kosongkan bila ingin melihat semua file yang bisa dipulihkan.
+
+   ![Form "Apa yang Anda cari?"](docs/cari-file.png)
+4. **Pilih metode.** *Lengkap* (disarankan), *Cepat* (hanya metadata), atau
    *Mendalam* (hanya signature).
-4. Klik **Mulai Pindai**. Hasil muncul langsung selama pemindaian berjalan.
-5. Saring dengan pencarian, jenis file, atau "Hanya kondisi baik". Klik baris
-   untuk pratinjau, centang file yang diinginkan (tombol <kbd>Spasi</kbd> juga
-   bisa, <kbd>↑</kbd>/<kbd>↓</kbd> untuk berpindah).
-6. Isi **Simpan ke** dengan folder di **drive lain**, lalu klik **Pulihkan**.
+5. Klik **Mulai Pindai**. Hasil muncul langsung selama pemindaian berjalan.
+6. Persempit atau ubah pencarian di panel kiri, atau klik folder di pohon
+   **Folder asal**. Klik baris untuk pratinjau, lalu centang file yang
+   diinginkan (tombol <kbd>Spasi</kbd> juga bisa, <kbd>↑</kbd>/<kbd>↓</kbd>
+   untuk berpindah). **Reset pencarian** menampilkan semua hasil lagi.
+7. Isi **Simpan ke** dengan folder di **drive lain**, lalu klik **Pulihkan**.
+
+> Hasil pencarian mendalam tidak menyimpan nama, folder, atau (sering) tanggal
+> aslinya. Saat mencari berdasarkan nama/folder/tanggal, file seperti itu tetap
+> ikut ditampilkan bila jenisnya cocok dengan jenis yang Anda pilih (opsi
+> "Sertakan hasil signature yang jenisnya cocok"), karena bisa jadi itulah file
+> yang Anda cari.
 
 > ⚠ Begitu menyadari ada file terhapus, berhentilah menyimpan apa pun ke drive
 > tersebut. Data baru dapat menimpa file yang ingin dipulihkan.
@@ -79,9 +96,20 @@ pulih-cli scan /dev/sdb --types image,video --good-only --recover ~/hasil
 pulih-cli scan disk.img --deep-only --all-space --list
 ```
 
+Mencari file tertentu:
+
+```sh
+pulih-cli scan \\.\D: --name "skripsi" --recover E:\hasil
+pulih-cli scan /dev/sdb --name "IMG_2023*" --ext jpg,heic --after 2023-08-01 --before 2023-08-31
+pulih-cli scan disk.img --ext docx,pdf --folder Kuliah --list
+```
+
 Opsi: `--quick-only`, `--deep-only`, `--all-space` (pindai seluruh perangkat,
 bukan hanya ruang kosong), `--byte-level`, `--types`, `--threads N`,
-`--good-only`, `--min-size BYTES`, `--list`, `--recover DIR`.
+`--good-only`, `--min-size BYTES`, `--max-size BYTES`, `--name POLA`,
+`--ext JENIS`, `--folder TEKS`, `--after TTTT-BB-HH`, `--before TTTT-BB-HH`,
+`--strict` (buang hasil signature yang tidak bisa dicek nama/folder/tanggalnya),
+`--list`, `--recover DIR`.
 
 ## Mengapa cepat
 
@@ -137,8 +165,9 @@ Pada disk sungguhan, pemindaian berjalan pada kecepatan baca disk itu sendiri:
   Di NTFS, file terfragmentasi pulih utuh.
 - **NTFS terkompresi atau terenkripsi (EFS).** File seperti ini dilewati, dan
   jumlahnya dicatat di log.
-- **Hasil pencarian mendalam tidak punya nama asli.** File diberi nama seperti
-  `f000012345.jpg` (nomor sektor), dikelompokkan per tipe.
+- **Hasil pencarian mendalam tidak punya nama asli.** Bila isinya punya judul
+  (dokumen, lagu), judul itu dipakai sebagai nama; selain itu file diberi nama
+  seperti `f000012345.jpg` (nomor sektor), dikelompokkan per tipe.
 - **ext4/APFS** hanya didukung lewat pencarian mendalam.
 
 ## Membangun dari sumber
@@ -175,9 +204,12 @@ crates/
     carve/mod.rs     pipeline pembaca + worker paralel
     carve/formats.rs signature dan resolver ukuran untuk ±30 format
     carve/window.rs  akses byte untuk resolver (memori dulu, baru disk)
+    carve/meta.rs    identitas dari isi: judul dokumen/PDF, EXIF, ID3/Vorbis, tanggal video
+    target.rs        kriteria "file yang dicari": pola nama, jenis, folder, tanggal, ukuran
+    inspect.rs       pratinjau isi dokumen & metadata untuk hasil mana pun
     scan.rs          orkestrasi, progres lock-free, aliran event
     recover.rs       penulisan hasil (berurutan sesuai posisi di disk)
-  pulih-gui/         aplikasi desktop (egui)
+  pulih-gui/         aplikasi desktop (egui); find.rs = form pencarian & pohon folder
   pulih-cli/         antarmuka baris perintah
 scripts/             pengujian end-to-end dengan image filesystem sungguhan
 ```

@@ -1849,24 +1849,25 @@ checksum = "3d595e54a326bc53c1c197b32d295e14b169e3cfeaa8dc82b529f947fba6bcf5"
 
 [[package]]
 name = "pulih-cli"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "pulih-core",
 ]
 
 [[package]]
 name = "pulih-core"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "aho-corasick",
  "crossbeam-channel",
  "libc",
  "memchr",
+ "miniz_oxide 0.8.9",
 ]
 
 [[package]]
 name = "pulih-gui"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "crossbeam-channel",
  "eframe",

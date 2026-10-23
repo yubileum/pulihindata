@@ -49,7 +49,9 @@ fn jpeg(rng: &mut Rng) -> Vec<u8> {
     v.extend(b"JFIF\0\x01\x01\0\0\x01\0\x01\0\0");
     v.extend([0xFF, 0xDB, 0x00, 0x43, 0x00]);
     v.extend(rng.bytes(64));
-    v.extend([0xFF, 0xC0, 0x00, 0x0B, 0x08, 0x00, 0x10, 0x00, 0x10, 0x01, 0x01, 0x11, 0x00]);
+    v.extend([
+        0xFF, 0xC0, 0x00, 0x0B, 0x08, 0x00, 0x10, 0x00, 0x10, 0x01, 0x01, 0x11, 0x00,
+    ]);
     v.extend([0xFF, 0xDA, 0x00, 0x08, 0x01, 0x01, 0x00, 0x00, 0x3F, 0x00]);
     // Entropy-coded data: every 0xFF is stuffed with 0x00, plus a restart marker.
     for (i, b) in rng.bytes(20_000).into_iter().enumerate() {
@@ -116,7 +118,9 @@ fn wav(rng: &mut Rng) -> Vec<u8> {
 }
 
 fn pdf(rng: &mut Rng) -> Vec<u8> {
-    let mut v = b"%PDF-1.7\n1 0 obj\n<< /Type /Catalog >>\nendobj\n2 0 obj\n<< /Length 4000 >>\nstream\n".to_vec();
+    let mut v =
+        b"%PDF-1.7\n1 0 obj\n<< /Type /Catalog >>\nendobj\n2 0 obj\n<< /Length 4000 >>\nstream\n"
+            .to_vec();
     v.extend(rng.bytes(4000));
     v.extend(b"\nendstream\nendobj\nxref\n0 3\ntrailer\n<< /Root 1 0 R >>\nstartxref\n9\n%%EOF\n");
     // Incremental update: a second revision must be included.
@@ -199,7 +203,11 @@ fn carves_every_format_exactly() {
     }
     disk.extend(rng.bytes(1 << 20));
 
-    let opts = ScanOptions { quick: false, free_only: false, ..Default::default() };
+    let opts = ScanOptions {
+        quick: false,
+        free_only: false,
+        ..Default::default()
+    };
     let h = start_scan(Arc::new(MemSource(disk)), opts);
     let mut carved = Vec::new();
     for ev in h.events.iter() {
@@ -217,5 +225,9 @@ fn carves_every_format_exactly() {
         assert_eq!(hit.origin, Origin::Carved);
         assert!(matches!(&hit.data, FileData::Extents(e) if e.len() == 1));
     }
-    assert_eq!(carved.len(), expect.len(), "no false positives in random data: {carved:#?}");
+    assert_eq!(
+        carved.len(),
+        expect.len(),
+        "no false positives in random data: {carved:#?}"
+    );
 }

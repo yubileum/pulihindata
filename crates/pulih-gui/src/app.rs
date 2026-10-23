@@ -1,5 +1,5 @@
 use std::cmp::Ordering;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -10,10 +10,11 @@ use egui_extras::{Column, TableBuilder};
 use pulih_core::bytes::{fmt_size, fmt_time};
 use pulih_core::{
     list_devices, recover, same_disk, start_scan, Category, Condition, Device, DeviceInfo,
-    DeviceKind, FileData, FoundFile, Origin, Phase, ReadAt, RecoverOptions, RecoverProgress,
-    RecoverReport, ScanEvent, ScanHandle, ScanOptions, ScanSummary, Volume,
+    DeviceKind, FileData, FoundFile, Inspection, Origin, Phase, ReadAt, RecoverOptions,
+    RecoverProgress, RecoverReport, ScanEvent, ScanHandle, ScanOptions, ScanSummary, Volume,
 };
 
+use crate::find::{self, Find};
 use crate::i18n::{Lang, T};
 use crate::preview::{Preview, Previewer};
 use crate::theme::{ACCENT, BAD, GOOD, MUTED, WARN};
@@ -49,12 +50,10 @@ enum Screen {
     Results,
 }
 
+/// Result-only filters (the search itself lives in [`Find`]).
 struct Filter {
-    text: String,
-    cats: [bool; 6],
     good_only: bool,
     origin: OriginFilter,
-    min_kb: u64,
 }
 
 enum PreviewState {
@@ -97,12 +96,20 @@ pub struct App {
     last_build: Instant,
     counts: [usize; 6],
     filter: Filter,
+    find: Find,
+    ext_counts: HashMap<String, usize>,
+    tree: Vec<(u16, String, find::Node)>,
+    tree_sel: Option<(u16, String)>,
+    stats_dirty: bool,
+    /// Types the running/last deep scan was limited to.
+    deep_limit: Option<Vec<String>>,
     sort: (Col, bool),
     focus: Option<u64>,
     scroll_to: Option<usize>,
 
     previewer: Previewer,
     preview: Option<(u64, PreviewState)>,
+    inspection: Option<(u64, Inspection)>,
 
     recover: Option<RecoverJob>,
     keep_folders: bool,
@@ -143,17 +150,21 @@ impl App {
             last_build: Instant::now(),
             counts: [0; 6],
             filter: Filter {
-                text: String::new(),
-                cats: [true; 6],
                 good_only: false,
                 origin: OriginFilter::All,
-                min_kb: 0,
             },
+            find: Find::default(),
+            ext_counts: HashMap::new(),
+            tree: Vec::new(),
+            tree_sel: None,
+            stats_dirty: false,
+            deep_limit: None,
             sort: (Col::Condition, true),
             focus: None,
             scroll_to: None,
             previewer: Previewer::default(),
             preview: None,
+            inspection: None,
             recover: None,
             keep_folders: true,
             out_dir: String::new(),
@@ -204,6 +215,7 @@ impl App {
             }
             if changed {
                 self.view_dirty = true;
+                self.stats_dirty = true;
             }
             if self.summary.is_some() && finished {
                 if let Some(h) = self.scan.take() {
@@ -219,8 +231,9 @@ impl App {
         {
             self.rebuild_view();
         }
-        for (id, p) in self.previewer.rx.try_iter() {
+        for (id, p, ins) in self.previewer.rx.try_iter() {
             if self.preview.as_ref().is_some_and(|(pid, _)| *pid == id) {
+                self.inspection = Some((id, ins));
                 let st = match p {
                     Preview::Image { w, h, rgba, full } => {
                         let img = egui::ColorImage::from_rgba_unmultiplied(
@@ -255,23 +268,25 @@ impl App {
     }
 
     fn rebuild_view(&mut self) {
-        let needle = self.filter.text.trim().to_ascii_lowercase();
-        let min = self.filter.min_kb * 1024;
+        if self.stats_dirty {
+            self.ext_counts = find::ext_counts(&self.files);
+            self.tree = find::build_tree(&self.files, &self.vols);
+            self.stats_dirty = false;
+        }
+        let target = self.find.target();
         let flt = &self.filter;
+        let sel = &self.tree_sel;
         let mut view: Vec<u32> = (0..self.files.len() as u32)
             .filter(|&i| {
                 let f = &self.files[i as usize];
-                flt.cats[f.category as usize]
-                    && f.size >= min
-                    && (!flt.good_only || f.condition == Condition::Good)
+                (!flt.good_only || f.condition == Condition::Good)
                     && match flt.origin {
                         OriginFilter::All => true,
                         OriginFilter::Fs => f.origin != Origin::Carved,
                         OriginFilter::Carved => f.origin == Origin::Carved,
                     }
-                    && (needle.is_empty()
-                        || icontains(&f.name, &needle)
-                        || icontains(&f.dir, &needle))
+                    && sel.as_ref().is_none_or(|s| find::in_folder(f, s))
+                    && target.matches(f)
             })
             .collect();
         let files = &self.files;
@@ -326,6 +341,9 @@ impl App {
             }
         };
         let mut o = self.opts.clone();
+        o.categories = 0x3F;
+        o.only_exts = self.find.target().wanted_exts();
+        self.deep_limit = o.only_exts.clone().filter(|_| self.mode != Mode::Quick);
         (o.quick, o.deep) = match self.mode {
             Mode::Both => (true, true),
             Mode::Quick => (true, false),
@@ -346,6 +364,9 @@ impl App {
         self.vols.clear();
         self.focus = None;
         self.preview = None;
+        self.tree.clear();
+        self.tree_sel = None;
+        self.ext_counts.clear();
         self.scan = Some(start_scan(dev.clone(), o));
         self.source = Some(dev);
         self.screen = Screen::Results;
@@ -529,6 +550,31 @@ impl App {
                             ui.label(RichText::new(t.drop_hint).small().color(MUTED));
 
                             ui.add_space(14.0);
+                            ui.heading(t.step_find);
+                            ui.label(RichText::new(t.step_find_hint).color(MUTED));
+                            ui.add_space(4.0);
+                            egui::Frame::group(ui.style())
+                                .corner_radius(8)
+                                .inner_margin(10)
+                                .show(ui, |ui| {
+                                    ui.set_width(ui.available_width());
+                                    find::form(ui, &mut self.find, None, t, true);
+                                    if let Some(e) = self.find.target().wanted_exts() {
+                                        if self.mode != Mode::Quick {
+                                            ui.label(
+                                                RichText::new(format!(
+                                                    "🔎 {}: {}",
+                                                    t.deep_limited,
+                                                    e.join(", ").to_uppercase()
+                                                ))
+                                                .small()
+                                                .color(ACCENT),
+                                            );
+                                        }
+                                    }
+                                });
+
+                            ui.add_space(14.0);
                             ui.heading(t.step_options);
                             ui.add_space(4.0);
                             ui.columns(3, |cols| {
@@ -552,22 +598,6 @@ impl App {
                                         .on_hover_text(t.free_only_hint);
                                     ui.checkbox(&mut self.opts.byte_level, t.byte_level)
                                         .on_hover_text(t.byte_level_hint);
-                                });
-                                ui.add_space(2.0);
-                                ui.label(RichText::new(t.file_types).strong());
-                                ui.horizontal_wrapped(|ui| {
-                                    for c in Category::ALL {
-                                        let mut on = self.opts.categories & c.bit() != 0;
-                                        if ui
-                                            .toggle_value(
-                                                &mut on,
-                                                format!("{} {}", cat_icon(c), t.cats[c as usize]),
-                                            )
-                                            .changed()
-                                        {
-                                            self.opts.categories ^= c.bit();
-                                        }
-                                    }
                                 });
                                 egui::CollapsingHeader::new(t.advanced).show(ui, |ui| {
                                     ui.add(
@@ -649,84 +679,111 @@ impl App {
 
         egui::Panel::left("filters")
             .resizable(true)
-            .default_size(215.0)
-            .min_size(170.0)
+            .default_size(250.0)
+            .min_size(200.0)
             .show(ui, |ui| {
-                ui.add_space(6.0);
-                let r = ui.add(
-                    egui::TextEdit::singleline(&mut self.filter.text)
-                        .hint_text(t.search)
-                        .desired_width(f32::INFINITY),
-                );
-                if r.changed() {
-                    self.view_dirty = true;
-                }
-                ui.add_space(6.0);
-                ui.label(RichText::new(t.filters).strong());
-                for c in Category::ALL {
-                    let label = format!(
-                        "{} {}  ({})",
-                        cat_icon(c),
-                        t.cats[c as usize],
-                        fmt_num(self.counts[c as usize], self.lang)
-                    );
-                    if ui
-                        .checkbox(&mut self.filter.cats[c as usize], label)
-                        .changed()
-                    {
-                        self.view_dirty = true;
-                    }
-                }
-                ui.separator();
-                if ui
-                    .checkbox(&mut self.filter.good_only, t.only_good)
-                    .changed()
-                {
-                    self.view_dirty = true;
-                }
-                for (o, l) in [
-                    (OriginFilter::All, t.origin_all),
-                    (OriginFilter::Fs, t.origin_fs),
-                    (OriginFilter::Carved, t.origin_carved),
-                ] {
-                    if ui.radio_value(&mut self.filter.origin, o, l).changed() {
-                        self.view_dirty = true;
-                    }
-                }
-                ui.horizontal(|ui| {
-                    ui.label(t.min_size);
-                    if ui
-                        .add(
-                            egui::DragValue::new(&mut self.filter.min_kb)
-                                .speed(4.0)
-                                .range(0..=10_000_000),
-                        )
-                        .changed()
-                    {
-                        self.view_dirty = true;
-                    }
-                });
-                ui.separator();
-                ui.horizontal_wrapped(|ui| {
-                    if ui.button(t.select_all).clicked() {
-                        for &i in &self.view {
-                            self.checked.insert(self.files[i as usize].id);
+                egui::ScrollArea::vertical()
+                    .auto_shrink(false)
+                    .show(ui, |ui| {
+                        ui.add_space(6.0);
+                        if self.find.is_active() || self.tree_sel.is_some() {
+                            egui::Frame::new()
+                                .fill(ACCENT.gamma_multiply(0.12))
+                                .corner_radius(6)
+                                .inner_margin(6)
+                                .show(ui, |ui| {
+                                    ui.set_width(ui.available_width());
+                                    ui.label(
+                                        RichText::new(format!(
+                                            "🔎 {} — {} {}",
+                                            t.search_active,
+                                            fmt_num(self.view.len(), self.lang),
+                                            t.matching
+                                        ))
+                                        .strong(),
+                                    );
+                                    let mut s = find::summary(&self.find, t);
+                                    if let Some((_, p)) = &self.tree_sel {
+                                        let folder = format!(
+                                            "📁 {}",
+                                            if p.is_empty() { "/" } else { p.as_str() }
+                                        );
+                                        s = if s.is_empty() {
+                                            folder
+                                        } else {
+                                            format!("{s}  ·  {folder}")
+                                        };
+                                    }
+                                    if !s.is_empty() {
+                                        ui.label(RichText::new(s).small());
+                                    }
+                                    if ui.button(t.reset_search).clicked() {
+                                        self.find = Find::default();
+                                        self.tree_sel = None;
+                                        self.view_dirty = true;
+                                    }
+                                });
+                            ui.add_space(4.0);
                         }
-                        self.recount_checked();
-                    }
-                    if ui.button(t.select_none).clicked() {
-                        self.checked.clear();
-                        self.checked_bytes = 0;
-                    }
-                });
-                if !self.logs.is_empty() {
-                    ui.separator();
-                    egui::CollapsingHeader::new(t.log).show(ui, |ui| {
-                        for l in &self.logs {
-                            ui.label(RichText::new(l).small());
+                        if find::form(ui, &mut self.find, Some(&self.ext_counts), t, false) {
+                            self.view_dirty = true;
+                        }
+                        ui.separator();
+                        egui::CollapsingHeader::new(
+                            RichText::new(format!("📁 {}", t.find_folder)).strong(),
+                        )
+                        .default_open(true)
+                        .show(ui, |ui| {
+                            if ui
+                                .selectable_label(self.tree_sel.is_none(), t.all_folders)
+                                .clicked()
+                            {
+                                self.tree_sel = None;
+                                self.view_dirty = true;
+                            }
+                            if find::tree_ui(ui, &self.tree, &mut self.tree_sel) {
+                                self.view_dirty = true;
+                            }
+                        });
+                        ui.separator();
+                        ui.label(RichText::new(t.filters).strong());
+                        if ui
+                            .checkbox(&mut self.filter.good_only, t.only_good)
+                            .changed()
+                        {
+                            self.view_dirty = true;
+                        }
+                        for (o, l) in [
+                            (OriginFilter::All, t.origin_all),
+                            (OriginFilter::Fs, t.origin_fs),
+                            (OriginFilter::Carved, t.origin_carved),
+                        ] {
+                            if ui.radio_value(&mut self.filter.origin, o, l).changed() {
+                                self.view_dirty = true;
+                            }
+                        }
+                        ui.separator();
+                        ui.horizontal_wrapped(|ui| {
+                            if ui.button(t.select_all).clicked() {
+                                for &i in &self.view {
+                                    self.checked.insert(self.files[i as usize].id);
+                                }
+                                self.recount_checked();
+                            }
+                            if ui.button(t.select_none).clicked() {
+                                self.checked.clear();
+                                self.checked_bytes = 0;
+                            }
+                        });
+                        if !self.logs.is_empty() {
+                            ui.separator();
+                            egui::CollapsingHeader::new(t.log).show(ui, |ui| {
+                                for l in &self.logs {
+                                    ui.label(RichText::new(l).small());
+                                }
+                            });
                         }
                     });
-                }
             });
 
         egui::Panel::right("preview")
@@ -802,14 +859,14 @@ impl App {
         egui::CentralPanel::default().show(ui, |ui| {
             if self.view.is_empty() {
                 ui.centered_and_justified(|ui| {
-                    ui.label(
-                        RichText::new(if self.scanning() {
-                            t.empty_scanning
-                        } else {
-                            t.empty_results
-                        })
-                        .color(MUTED),
-                    );
+                    let msg = if self.scanning() {
+                        t.empty_scanning
+                    } else if self.find.is_active() || self.tree_sel.is_some() {
+                        t.nothing_matches
+                    } else {
+                        t.empty_results
+                    };
+                    ui.label(RichText::new(msg).color(MUTED));
                 });
                 return;
             }
@@ -879,6 +936,17 @@ impl App {
                     stat(ui, t.found, &fmt_num(self.files.len(), lang));
                     stat(ui, t.origin_fs, &fmt_num(s.fs_found, lang));
                     stat(ui, t.origin_carved, &fmt_num(s.carved, lang));
+                    if let Some(e) = &self.deep_limit {
+                        ui.label(
+                            RichText::new(format!(
+                                "🔎 {}: {}",
+                                t.deep_limited,
+                                e.join(", ").to_uppercase()
+                            ))
+                            .small()
+                            .color(ACCENT),
+                        );
+                    }
                     if s.bad_sectors > 0 {
                         stat(ui, t.bad_sectors, &fmt_num(s.bad_sectors as usize, lang));
                     }
@@ -1013,6 +1081,9 @@ impl App {
                 });
                 row.col(|ui| {
                     ui.label(format!("{} {}", cat_icon(f.category), f.name));
+                    if let Some(i) = &f.info {
+                        ui.label(RichText::new(i).small().color(MUTED));
+                    }
                 });
                 row.col(|ui| {
                     ui.label(
@@ -1092,6 +1163,11 @@ impl App {
             ui.label(RichText::new("—").color(MUTED));
             return;
         };
+        let ins: Option<Inspection> = self
+            .inspection
+            .as_ref()
+            .filter(|(id, _)| *id == f.id)
+            .map(|(_, i)| i.clone());
         egui::ScrollArea::vertical()
             .auto_shrink(false)
             .show(ui, |ui| {
@@ -1119,8 +1195,26 @@ impl App {
                         );
                     }
                     Some(PreviewState::Text(s)) => {
+                        let is_doc = ins.as_ref().is_some_and(|i| i.text.is_some());
+                        if is_doc {
+                            ui.label(
+                                RichText::new(format!("📄 {}", t.doc_text))
+                                    .small()
+                                    .color(MUTED),
+                            );
+                        }
                         egui::Frame::group(ui.style()).show(ui, |ui| {
-                            ui.add(egui::Label::new(RichText::new(s).monospace().small()).wrap());
+                            egui::ScrollArea::vertical()
+                                .id_salt("doctext")
+                                .max_height(300.0)
+                                .show(ui, |ui| {
+                                    let text = if is_doc {
+                                        RichText::new(s)
+                                    } else {
+                                        RichText::new(s).monospace().small()
+                                    };
+                                    ui.add(egui::Label::new(text).wrap());
+                                });
                         });
                     }
                     Some(PreviewState::Hex(s)) => {
@@ -1128,7 +1222,10 @@ impl App {
                         egui::ScrollArea::horizontal()
                             .id_salt("hex")
                             .show(ui, |ui| {
-                                ui.add(egui::Label::new(RichText::new(s).monospace().size(10.5)).extend());
+                                ui.add(
+                                    egui::Label::new(RichText::new(s).monospace().size(10.5))
+                                        .extend(),
+                                );
                             });
                     }
                     None => {}
@@ -1167,6 +1264,22 @@ impl App {
                         if let Some(m) = f.modified {
                             kv(t.col_modified, fmt_time(m));
                         }
+                        if let Some(i) = &ins {
+                            if let Some(title) =
+                                i.title.as_ref().filter(|x| !f.name.starts_with(x.as_str()))
+                            {
+                                kv(t.content_title, title.clone());
+                            }
+                            if let Some(tm) = i.time.filter(|tm| Some(*tm) != f.modified) {
+                                kv(t.content_date, fmt_time(tm));
+                            }
+                            if let Some(info) = i.info.as_ref().filter(|_| f.info.is_none()) {
+                                kv(t.info, info.clone());
+                            }
+                        }
+                        if let Some(i) = &f.info {
+                            kv(t.info, i.clone());
+                        }
                         kv(t.col_source, origin_label(f.origin, t).to_string());
                         let vol = self
                             .vols
@@ -1184,11 +1297,16 @@ impl App {
                     });
                 if f.origin == Origin::Carved {
                     ui.add_space(4.0);
+                    let named = !f.name.starts_with('f') || f.name.contains(' ');
                     ui.label(
-                        RichText::new(t.carved_name_note)
-                            .small()
-                            .italics()
-                            .color(MUTED),
+                        RichText::new(if named {
+                            t.named_from_content
+                        } else {
+                            t.carved_name_note
+                        })
+                        .small()
+                        .italics()
+                        .color(MUTED),
                     );
                 }
                 ui.add_space(8.0);
@@ -1377,7 +1495,7 @@ fn stat(ui: &mut egui::Ui, k: &str, v: &str) {
     ui.add_space(10.0);
 }
 
-fn cat_icon(c: Category) -> &'static str {
+pub(crate) fn cat_icon(c: Category) -> &'static str {
     match c {
         Category::Image => "🖼",
         Category::Video => "🎞",
@@ -1427,14 +1545,6 @@ fn fmt_dur(d: Duration) -> String {
     } else {
         format!("{}:{:02}", s / 60, s % 60)
     }
-}
-
-/// Case-insensitive (ASCII) substring test without allocating.
-fn icontains(hay: &str, needle_lc: &str) -> bool {
-    let (h, n) = (hay.as_bytes(), needle_lc.as_bytes());
-    n.is_empty()
-        || h.windows(n.len())
-            .any(|w| w.iter().zip(n).all(|(a, b)| a.to_ascii_lowercase() == *b))
 }
 
 fn icmp(a: &str, b: &str) -> Ordering {

@@ -115,6 +115,9 @@ pub struct FoundFile {
     /// Index into `ScanSummary::volumes`, or `u16::MAX` for whole-device carving.
     pub volume: u16,
     pub data: FileData,
+    /// Extra identification read from the file's content (camera model,
+    /// song artist, document title…), mostly for signature results.
+    pub info: Option<String>,
 }
 
 impl FoundFile {

@@ -29,12 +29,22 @@ shutil.rmtree(out, ignore_errors=True)
 args = [cli, 'scan', img, '--deep-only', '--all-space', '--list', '--recover', out] + sys.argv[1:]
 r = subprocess.run(args, capture_output=True, text=True)
 print(r.stderr)
-found = {}
+# Map each carved result's offset to its recovered file. Names may come from
+# the content (document title, song tag), so go through the --list output.
+listed = {}
+for line in r.stdout.splitlines():
+    m = re.match(r'^Signature\s+\S+\s+\S+ \S+\s+(?:-|\S+ \S+)\s+(.*?)\s+(\d+)(?:  \[.*\])?$', line)
+    if m:
+        listed[int(m.group(2))] = m.group(1)
+files_by_name = {}
 for root, _, fs in os.walk(out):
     for n in fs:
-        m = re.match(r'f(\d+)(?:_(\d+))?\.', n)
-        if m:
-            found[int(m.group(1)) * 512 + int(m.group(2) or 0)] = os.path.join(root, n)
+        files_by_name.setdefault(n, []).append(os.path.join(root, n))
+found = {}
+for off, name in listed.items():
+    cands = files_by_name.get(os.path.basename(name), [])
+    if cands:
+        found[off] = cands.pop(0)
 ok = bad = 0
 for off, (name, md5, size) in sorted(expect.items()):
     p = found.get(off)

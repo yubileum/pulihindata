@@ -294,6 +294,7 @@ pub fn scan(src: &dyn ReadAt, vol: &Volume, ctx: &ScanCtx) -> io::Result<FsRepor
                 condition: condition_from(reused + missing, needed),
                 volume: vol.index,
                 data: FileData::Extents(to_extents(&fs, &cl, set.size)),
+                info: None,
             });
         }
     }

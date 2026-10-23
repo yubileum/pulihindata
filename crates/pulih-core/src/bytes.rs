@@ -100,6 +100,43 @@ pub fn crc32(data: &[u8]) -> u32 {
     !c
 }
 
+/// Seconds the local time zone is ahead of UTC (WIB = +25200).
+///
+/// Every `modified` time in this crate is *local wall-clock* time, the way
+/// FAT and EXIF store it and the way people remember it; sources that record
+/// UTC (NTFS, MP4, Office) are shifted by this offset.
+pub fn local_offset() -> i64 {
+    static OFF: std::sync::OnceLock<i64> = std::sync::OnceLock::new();
+    *OFF.get_or_init(|| {
+        #[cfg(unix)]
+        // SAFETY: localtime_r only writes into the provided struct.
+        unsafe {
+            let t = libc::time(std::ptr::null_mut());
+            let mut tm: libc::tm = std::mem::zeroed();
+            if libc::localtime_r(&t, &mut tm).is_null() {
+                0
+            } else {
+                tm.tm_gmtoff as i64
+            }
+        }
+        #[cfg(windows)]
+        {
+            #[link(name = "kernel32")]
+            extern "system" {
+                fn GetTimeZoneInformation(tzi: *mut u8) -> u32;
+            }
+            let mut tzi = [0u8; 172];
+            // SAFETY: TIME_ZONE_INFORMATION is 172 bytes.
+            let id = unsafe { GetTimeZoneInformation(tzi.as_mut_ptr()) };
+            let rd = |o: usize| i32::from_le_bytes(tzi[o..o + 4].try_into().unwrap()) as i64;
+            let extra = if id == 2 { rd(168) } else { rd(84) };
+            -(rd(0) + extra) * 60
+        }
+        #[cfg(not(any(unix, windows)))]
+        0
+    })
+}
+
 /// Convert a Windows FILETIME (100ns ticks since 1601) to Unix seconds.
 pub fn filetime_to_unix(ft: u64) -> Option<i64> {
     if ft == 0 {

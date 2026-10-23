@@ -8,8 +8,8 @@ use std::time::{Duration, Instant};
 
 use pulih_core::bytes::{fmt_size, fmt_time};
 use pulih_core::{
-    list_devices, recover, start_scan, Category, Condition, Device, FoundFile, Origin, Phase,
-    ReadAt, RecoverOptions, RecoverProgress, ScanEvent, ScanOptions,
+    list_devices, parse_date, recover, start_scan, Category, Condition, Device, FoundFile, Origin,
+    Phase, ReadAt, RecoverOptions, RecoverProgress, ScanEvent, ScanOptions, Target,
 };
 
 const USAGE: &str = "\
@@ -29,6 +29,17 @@ SCAN OPTIONS:
   --good-only         keep only results whose data looks intact
   --min-size BYTES    ignore smaller results
   --list              print every result
+
+LOOKING FOR SPECIFIC FILES:
+  --name PATTERNS     file names, ';'-separated; * and ? allowed
+                      (\"skripsi\" matches anywhere, \"IMG_2024*.jpg\" exactly)
+  --ext LIST          only these types, e.g. docx,pdf or jpg,heic
+  --folder TEXT       original folder contains TEXT (e.g. Kuliah/Semester5)
+  --after YYYY-MM-DD  modified on/after this date
+  --before YYYY-MM-DD modified before this date
+  --max-size BYTES    ignore larger results
+  --strict            drop signature results that cannot be checked
+                      against name/folder/date (they have no original name)
   --recover DIR       write the results into DIR (never the scanned disk!)
 ";
 
@@ -80,7 +91,8 @@ fn main() -> ExitCode {
 
 fn scan(source: &str, rest: &[String]) -> ExitCode {
     let mut opts = ScanOptions::default();
-    let (mut list, mut good_only, mut min_size) = (false, false, 0u64);
+    let (mut list, mut good_only) = (false, false);
+    let mut target = Target::default();
     let mut out: Option<PathBuf> = None;
     let mut it = rest.iter();
     while let Some(a) = it.next() {
@@ -100,9 +112,31 @@ fn scan(source: &str, rest: &[String]) -> ExitCode {
                 None => return bad("--threads expects a number"),
             },
             "--min-size" => match it.next().and_then(|s| s.parse().ok()) {
-                Some(n) => min_size = n,
+                Some(n) => target.min_size = n,
                 None => return bad("--min-size expects bytes"),
             },
+            "--max-size" => match it.next().and_then(|s| s.parse().ok()) {
+                Some(n) => target.max_size = n,
+                None => return bad("--max-size expects bytes"),
+            },
+            "--name" => match it.next() {
+                Some(p) => target.set_names(p),
+                None => return bad("--name expects patterns"),
+            },
+            "--ext" => match it.next() {
+                Some(e) => target.set_exts(e.split(',')),
+                None => return bad("--ext expects e.g. docx,pdf"),
+            },
+            "--folder" => match it.next() {
+                Some(f) => target.folder = f.trim().replace('\\', "/").to_lowercase(),
+                None => return bad("--folder expects text"),
+            },
+            "--after" | "--before" => match it.next().and_then(|d| parse_date(d)) {
+                Some(t) if a == "--after" => target.after = Some(t),
+                Some(t) => target.before = Some(t + 86_400),
+                None => return bad("dates look like 2024-03-15"),
+            },
+            "--strict" => target.include_unnamed = false,
             "--recover" => match it.next() {
                 Some(d) => out = Some(PathBuf::from(d)),
                 None => return bad("--recover expects a directory"),
@@ -130,6 +164,10 @@ fn scan(source: &str, rest: &[String]) -> ExitCode {
         }
     }
     eprintln!("Scanning {} ({})", source, fmt_size(dev.size()));
+    opts.only_exts = target.wanted_exts();
+    if let Some(e) = &opts.only_exts {
+        eprintln!("  deep scan limited to: {}", e.join(", "));
+    }
     let handle = start_scan(dev.clone(), opts);
     let mut files: Vec<FoundFile> = Vec::new();
     let mut vols = Vec::new();
@@ -170,7 +208,11 @@ fn scan(source: &str, rest: &[String]) -> ExitCode {
         }
     };
     handle.wait();
-    files.retain(|f| f.size >= min_size && (!good_only || f.condition == Condition::Good));
+    let all = files.len();
+    files.retain(|f| target.matches(f) && (!good_only || f.condition == Condition::Good));
+    if !target.is_empty() || good_only {
+        eprintln!("  {} of {all} results match the search", files.len());
+    }
     eprintln!(
         "\r  done in {:.2}s: {} from filesystem metadata, {} by signature, {} bad sectors{}",
         summary.elapsed.as_secs_f64(),
@@ -195,13 +237,19 @@ fn scan(source: &str, rest: &[String]) -> ExitCode {
     if list {
         for f in &files {
             println!(
-                "{:<7} {:<11} {:>10}  {:<16}  {:<45} {}",
+                "{:<7} {:<11} {:>10}  {:<16}  {:<45} {}{}",
                 f.origin.label(),
                 format!("{:?}", f.condition),
                 fmt_size(f.size),
                 f.modified.map_or("-".into(), fmt_time),
                 f.full_path(),
-                f.first_offset()
+                match f.first_offset() {
+                    u64::MAX => "-".to_string(), // stored inside the MFT record
+                    o => o.to_string(),
+                },
+                f.info
+                    .as_deref()
+                    .map_or(String::new(), |i| format!("  [{i}]"))
             );
         }
     }
