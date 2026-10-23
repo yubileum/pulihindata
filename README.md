@@ -14,6 +14,8 @@ browser tertanam: satu file `.exe` sekitar 8 MB yang langsung jalan.
   box MP4, central directory ZIP, dsb.), jadi file hasil pulih tidak terpotong
   dan tidak berisi sampah di akhir.
 
+![Tampilan hasil pemindaian Pulih](docs/screenshot.png)
+
 
 ## Fitur
 
