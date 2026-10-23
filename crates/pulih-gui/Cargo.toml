@@ -1,0 +1,24 @@
+[package]
+name = "pulih-gui"
+description = "Pulih — desktop app to recover deleted files"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[[bin]]
+name = "pulih"
+path = "src/main.rs"
+
+[dependencies]
+pulih-core.workspace = true
+eframe = { version = "0.37", default-features = false, features = ["glow", "default_fonts", "x11", "wayland"] }
+egui = { version = "0.37", default-features = false, features = ["monochrome_emoji_fonts"] }
+egui_extras = { version = "0.37", default-features = false }
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "gif", "bmp", "webp", "tiff"] }
+rfd = "0.17"
+crossbeam-channel = "0.5"
+
+[build-dependencies]
+embed-manifest = "1.5"

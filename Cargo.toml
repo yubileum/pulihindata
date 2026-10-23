@@ -1,0 +1,26 @@
+[workspace]
+resolver = "2"
+members = ["crates/pulih-core", "crates/pulih-cli", "crates/pulih-gui"]
+
+[workspace.package]
+version = "1.0.0"
+edition = "2021"
+rust-version = "1.95"
+license = "MIT"
+authors = ["Paulina Meiliani"]
+
+[workspace.dependencies]
+pulih-core = { path = "crates/pulih-core" }
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+strip = true
+# Keep unwinding: parsers run on untrusted disk data, and a worker panic must
+# never take the whole app down.
+panic = "unwind"
+
+# Fast debug builds for the heavy parsing code.
+[profile.dev.package."*"]
+opt-level = 2

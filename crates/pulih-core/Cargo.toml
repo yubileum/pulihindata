@@ -1,0 +1,16 @@
+[package]
+name = "pulih-core"
+description = "Fast deleted-file recovery engine: NTFS/FAT/exFAT metadata recovery and parallel signature carving"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+memchr = "2"
+aho-corasick = "1"
+crossbeam-channel = "0.5"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
