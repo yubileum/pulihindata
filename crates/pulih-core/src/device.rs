@@ -404,6 +404,8 @@ pub struct DeviceInfo {
     pub removable: bool,
     /// Path of the whole disk this partition lives on.
     pub parent: Option<String>,
+    /// Free bytes of a mounted filesystem (for usage bars).
+    pub free: Option<u64>,
 }
 
 /// List disks and partitions/volumes. Never fails: unreadable entries are
@@ -426,6 +428,20 @@ fn sniff_fs(path: &str) -> String {
         .map(|d| crate::volume::detect_fs(&d, 0).name().to_string())
         .filter(|s| s != "Unknown")
         .unwrap_or_default()
+}
+
+/// Free bytes of the filesystem mounted at `mount`.
+#[cfg(unix)]
+fn free_space(mount: &str) -> Option<u64> {
+    if mount.is_empty() {
+        return None;
+    }
+    let c = std::ffi::CString::new(mount).ok()?;
+    // SAFETY: statvfs writes into the zeroed struct we own.
+    unsafe {
+        let mut st: libc::statvfs = std::mem::zeroed();
+        (libc::statvfs(c.as_ptr(), &mut st) == 0).then(|| st.f_bavail as u64 * st.f_frsize as u64)
+    }
 }
 
 #[cfg(target_os = "linux")]
@@ -477,6 +493,7 @@ fn linux_list() -> Vec<DeviceInfo> {
         let removable = read(format!("{sys}/removable")) == "1";
         let path = format!("/dev/{name}");
         let (mount, fstype) = mounts.get(&path).cloned().unwrap_or_default();
+        let free = free_space(&mount);
         let fs = if fstype.is_empty() {
             sniff_fs(&path)
         } else {
@@ -496,6 +513,7 @@ fn linux_list() -> Vec<DeviceInfo> {
             mount,
             removable,
             parent: None,
+            free,
         });
         let mut parts: Vec<String> = fs::read_dir(&sys)
             .map(|d| {
@@ -510,6 +528,7 @@ fn linux_list() -> Vec<DeviceInfo> {
             let psize = read(format!("{sys}/{p}/size")).parse::<u64>().unwrap_or(0) * 512;
             let ppath = format!("/dev/{p}");
             let (mount, fstype) = mounts.get(&ppath).cloned().unwrap_or_default();
+            let free = free_space(&mount);
             let fs = if fstype.is_empty() {
                 sniff_fs(&ppath)
             } else {
@@ -525,6 +544,7 @@ fn linux_list() -> Vec<DeviceInfo> {
                 mount,
                 removable,
                 parent: Some(path.clone()),
+                free,
             });
         }
     }
@@ -564,6 +584,7 @@ fn macos_list() -> Vec<DeviceInfo> {
             mount: String::new(),
             removable: false,
             parent: is_part.then(|| format!("/dev/r{}", &n[..n[4..].find('s').unwrap() + 4])),
+            free: None,
         });
     }
     out
@@ -620,6 +641,7 @@ fn windows_list() -> Vec<DeviceInfo> {
             mount: String::new(),
             removable,
             parent: None,
+            free: None,
         });
     }
     // SAFETY: trivial Win32 calls with valid, NUL-terminated buffers.
@@ -682,9 +704,40 @@ fn windows_list() -> Vec<DeviceInfo> {
             mount: format!("{letter}:\\"),
             removable: dtype == 2,
             parent,
+            free: (total > 0).then_some(tfree),
         });
     }
     out
+}
+
+/// Where a folder lives: the device holding it and the folder's path inside
+/// that volume ('/'-separated, no leading slash) — so "scan my Desktop"
+/// becomes "scan C: and show what was under Users/Name/Desktop".
+pub fn locate_folder(path: &std::path::Path) -> Option<(DeviceInfo, String)> {
+    let full = std::fs::canonicalize(path).ok()?;
+    let mut s = full.to_string_lossy().replace('\\', "/");
+    if let Some(r) = s.strip_prefix("//?/") {
+        s = r.to_string();
+    }
+    let under = |m: &str| -> bool {
+        let m = m.trim_end_matches('/');
+        let head = s.get(..m.len()).unwrap_or("");
+        let same = if cfg!(windows) {
+            head.eq_ignore_ascii_case(m)
+        } else {
+            head == m
+        };
+        same && (s.len() == m.len() || s.as_bytes().get(m.len()) == Some(&b'/'))
+    };
+    let best = list_devices()
+        .into_iter()
+        .filter(|d| !d.mount.is_empty() && under(&d.mount.replace('\\', "/")))
+        .max_by_key(|d| d.mount.len())?;
+    let m = best.mount.replace('\\', "/");
+    let rel = s[m.trim_end_matches('/').len()..]
+        .trim_matches('/')
+        .to_string();
+    Some((best, rel))
 }
 
 /// Best-effort check whether writing into `out_dir` would land on the same

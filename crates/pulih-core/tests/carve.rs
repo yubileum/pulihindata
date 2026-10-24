@@ -195,7 +195,7 @@ fn carves_every_format_exactly() {
         let n = 20_000 + (rng.next() % 50_000) as usize;
         let gap = rng.bytes(n);
         disk.extend(gap);
-        while disk.len() % 4096 != 0 {
+        while !disk.len().is_multiple_of(4096) {
             disk.push(rng.next() as u8);
         }
         expect.push((*ext, disk.len() as u64, data.len() as u64));

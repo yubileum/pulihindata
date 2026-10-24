@@ -4,11 +4,11 @@
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
-use eframe::egui::{self, RichText};
+use eframe::egui::{self, Sense, Stroke, Vec2};
 use pulih_core::{canon_ext, parse_date, Category, FoundFile, Origin, Target, Volume};
 
 use crate::i18n::T;
-use crate::theme::{ACCENT, MUTED};
+use crate::theme::{self, pal, semi};
 
 /// Type chips: label → canonical extensions.
 pub const TYPES: &[(Category, &str, &[&str])] = &[
@@ -138,8 +138,33 @@ impl Find {
     }
 }
 
-/// Clickable type chips grouped by category. With `counts`, only types that
-/// occur (or are selected) are shown, each with its number of results.
+pub const DATE_PRESETS: [DatePreset; 5] = [
+    DatePreset::Any,
+    DatePreset::Week,
+    DatePreset::Month,
+    DatePreset::Year,
+    DatePreset::Custom,
+];
+
+/// Toggle chip: soft blue when on, outlined when off.
+pub fn chip(ui: &mut egui::Ui, on: bool, text: &str) -> egui::Response {
+    let p = pal(ui);
+    let (fg, bg, stroke) = if on {
+        (p.primary, p.primary_soft, Stroke::new(1.0, p.primary))
+    } else {
+        (p.text, p.card, Stroke::new(1.0, p.border))
+    };
+    ui.add(
+        egui::Button::new(semi(text).size(12.5).color(fg))
+            .fill(bg)
+            .stroke(stroke)
+            .corner_radius(14)
+            .min_size(Vec2::new(0.0, 26.0)),
+    )
+}
+
+/// Type chips grouped by category. With `counts`, only types that occur
+/// (or are selected) are shown, each with its number of results.
 pub fn type_picker(
     ui: &mut egui::Ui,
     exts: &mut BTreeSet<String>,
@@ -154,6 +179,7 @@ pub fn type_picker(
                 .sum::<usize>()
         })
     };
+    let p = pal(ui);
     for cat in Category::ALL {
         let chips: Vec<&(Category, &str, &[&str])> = TYPES
             .iter()
@@ -166,16 +192,23 @@ pub fn type_picker(
             continue;
         }
         ui.horizontal_wrapped(|ui| {
-            ui.spacing_mut().item_spacing.x = 4.0;
+            ui.spacing_mut().item_spacing = Vec2::new(5.0, 5.0);
             let all_on = chips.iter().all(|c| c.2.iter().all(|e| exts.contains(*e)));
-            let label = format!("{} {}", crate::app::cat_icon(cat), t.cats[cat as usize]);
-            if ui
-                .add(egui::Button::selectable(
-                    all_on,
-                    RichText::new(label).strong(),
-                ))
-                .clicked()
-            {
+            let head = ui.add_sized(
+                [96.0, 26.0],
+                egui::Button::new(
+                    semi(format!("{} {}", cat_icon(cat), t.cats[cat as usize]))
+                        .size(12.5)
+                        .color(if all_on {
+                            p.primary
+                        } else {
+                            theme::type_color("", cat)
+                        }),
+                )
+                .fill(egui::Color32::TRANSPARENT)
+                .stroke(Stroke::NONE),
+            );
+            if head.clicked() {
                 for c in &chips {
                     for e in c.2 {
                         if all_on {
@@ -190,13 +223,10 @@ pub fn type_picker(
             for (_, name, list) in &chips {
                 let on = list.iter().all(|e| exts.contains(*e));
                 let text = match count_of(list) {
-                    Some(n) => format!("{name} {n}"),
+                    Some(n) => format!("{name}  {n}"),
                     None => name.to_string(),
                 };
-                if ui
-                    .add(egui::Button::selectable(on, RichText::new(text).small()))
-                    .clicked()
-                {
+                if chip(ui, on, &text).clicked() {
                     for e in *list {
                         if on {
                             exts.remove(*e);
@@ -212,122 +242,99 @@ pub fn type_picker(
     changed
 }
 
-/// The search form. `wide` = start screen layout; otherwise the narrow
-/// results side panel. Returns true when anything changed.
-pub fn form(
-    ui: &mut egui::Ui,
-    f: &mut Find,
-    counts: Option<&HashMap<String, usize>>,
-    t: &T,
-    wide: bool,
-) -> bool {
+pub fn date_picker(ui: &mut egui::Ui, f: &mut Find, t: &T) -> bool {
     let mut changed = false;
-    let label_w = if wide { 120.0 } else { 0.0 };
-    let row = |ui: &mut egui::Ui, label: &str, add: &mut dyn FnMut(&mut egui::Ui)| {
-        if wide {
-            ui.horizontal(|ui| {
-                ui.add_sized(
-                    [label_w, 22.0],
-                    egui::Label::new(RichText::new(label).strong()),
-                );
-                add(ui);
-            });
-        } else {
-            ui.label(RichText::new(label).strong());
-            add(ui);
+    ui.horizontal_wrapped(|ui| {
+        for (pr, l) in DATE_PRESETS.iter().zip(t.date_presets) {
+            if chip(ui, f.date == *pr, l).clicked() {
+                f.date = *pr;
+                changed = true;
+            }
         }
-    };
-
-    row(ui, t.find_name, &mut |ui| {
-        let r = ui.add(
-            egui::TextEdit::singleline(&mut f.names)
-                .hint_text(t.find_name_hint)
-                .desired_width(f32::INFINITY),
-        );
-        changed |= r.changed();
-        r.on_hover_text(t.find_name_help);
     });
-    if wide {
+    if f.date == DatePreset::Custom {
+        let bad = pal(ui).danger;
         ui.horizontal(|ui| {
-            ui.add_space(label_w + 8.0);
-            ui.add(egui::Label::new(RichText::new(t.find_name_help).small().color(MUTED)).wrap());
-        });
-    }
-    ui.add_space(4.0);
-    ui.label(RichText::new(t.find_types).strong());
-    changed |= type_picker(ui, &mut f.exts, counts, t);
-    ui.add_space(4.0);
-    row(ui, t.find_folder, &mut |ui| {
-        changed |= ui
-            .add(
-                egui::TextEdit::singleline(&mut f.folder)
-                    .hint_text(t.find_folder_hint)
-                    .desired_width(f32::INFINITY),
-            )
-            .changed();
-    });
-    row(ui, t.find_date, &mut |ui| {
-        ui.horizontal_wrapped(|ui| {
-            let presets = [
-                DatePreset::Any,
-                DatePreset::Week,
-                DatePreset::Month,
-                DatePreset::Year,
-                DatePreset::Custom,
-            ];
-            egui::ComboBox::from_id_salt(("date", wide))
-                .selected_text(
-                    t.date_presets[presets.iter().position(|p| *p == f.date).unwrap_or(0)],
-                )
-                .show_ui(ui, |ui| {
-                    for (p, l) in presets.iter().zip(t.date_presets) {
-                        changed |= ui.selectable_value(&mut f.date, *p, l).changed();
-                    }
-                });
-            if f.date == DatePreset::Custom {
-                for (lbl, val) in [(t.find_from, &mut f.from), (t.find_to, &mut f.to)] {
-                    ui.label(lbl);
-                    let ok = val.trim().is_empty() || parse_date(val).is_some();
-                    let r = ui.add(
+            for (lbl, val) in [(t.find_from, &mut f.from), (t.find_to, &mut f.to)] {
+                ui.label(lbl);
+                let ok = val.trim().is_empty() || parse_date(val).is_some();
+                changed |= ui
+                    .add(
                         egui::TextEdit::singleline(val)
                             .hint_text(t.date_hint)
-                            .desired_width(88.0)
-                            .text_color_opt((!ok).then_some(crate::theme::BAD)),
-                    );
-                    changed |= r.changed();
-                }
+                            .desired_width(96.0)
+                            .text_color_opt((!ok).then_some(bad)),
+                    )
+                    .changed();
             }
         });
+    }
+    changed
+}
+
+pub fn size_picker(ui: &mut egui::Ui, f: &mut Find, t: &T) -> bool {
+    let mut changed = false;
+    ui.horizontal(|ui| {
+        ui.label(t.find_min);
+        changed |= ui
+            .add(
+                egui::DragValue::new(&mut f.min_mb)
+                    .speed(0.1)
+                    .range(0.0..=1e6)
+                    .suffix(" MB")
+                    .max_decimals(1),
+            )
+            .changed();
+        ui.label(t.find_max);
+        changed |= ui
+            .add(
+                egui::DragValue::new(&mut f.max_mb)
+                    .speed(0.1)
+                    .range(0.0..=1e6)
+                    .suffix(" MB")
+                    .max_decimals(1),
+            )
+            .on_hover_text("0 = ∞")
+            .changed();
     });
-    row(ui, t.find_size, &mut |ui| {
-        ui.horizontal_wrapped(|ui| {
-            ui.label(t.find_min);
+    changed
+}
+
+/// The full criteria form (start screen "More filters").
+pub fn form(ui: &mut egui::Ui, f: &mut Find, t: &T) -> bool {
+    let p = pal(ui);
+    let mut changed = false;
+    let label = |ui: &mut egui::Ui, s: &str| {
+        ui.add_space(6.0);
+        ui.label(semi(s).color(p.muted).size(12.5));
+    };
+    label(ui, t.find_types);
+    changed |= type_picker(ui, &mut f.exts, None, t);
+    ui.horizontal_top(|ui| {
+        ui.vertical(|ui| {
+            ui.set_width(320.0);
+            label(ui, t.find_folder);
             changed |= ui
                 .add(
-                    egui::DragValue::new(&mut f.min_mb)
-                        .speed(0.1)
-                        .range(0.0..=1e6)
-                        .suffix(" MB")
-                        .max_decimals(1),
+                    egui::TextEdit::singleline(&mut f.folder)
+                        .hint_text(t.find_folder_hint)
+                        .desired_width(300.0),
                 )
-                .changed();
-            ui.label(t.find_max);
-            changed |= ui
-                .add(
-                    egui::DragValue::new(&mut f.max_mb)
-                        .speed(0.1)
-                        .range(0.0..=1e6)
-                        .suffix(" MB")
-                        .max_decimals(1),
-                )
-                .on_hover_text("0 = ∞")
                 .changed();
         });
+        ui.add_space(16.0);
+        ui.vertical(|ui| {
+            label(ui, t.find_size);
+            changed |= size_picker(ui, f, t);
+        });
     });
-    let r = ui
+    label(ui, t.find_date);
+    changed |= date_picker(ui, f, t);
+    ui.add_space(4.0);
+    changed |= ui
         .checkbox(&mut f.include_unnamed, t.include_unnamed)
-        .on_hover_text(t.include_unnamed_hint);
-    changed |= r.changed();
+        .on_hover_text(t.include_unnamed_hint)
+        .changed();
     changed
 }
 
@@ -338,45 +345,47 @@ pub fn summary(f: &Find, t: &T) -> String {
         parts.push(format!("\u{201c}{}\u{201d}", f.names.trim()));
     }
     if !f.exts.is_empty() {
-        let labels: Vec<&str> = TYPES
-            .iter()
-            .filter(|c| c.2.iter().any(|e| f.exts.contains(*e)))
-            .map(|c| c.1)
-            .collect();
-        parts.push(labels.join(", "));
+        parts.push(type_summary(&f.exts));
     }
     if !f.folder.trim().is_empty() {
-        parts.push(format!("📁 {}", f.folder.trim()));
+        parts.push(format!("{}: {}", t.find_folder, f.folder.trim()));
     }
     if f.date != DatePreset::Any {
-        let i = [
-            DatePreset::Any,
-            DatePreset::Week,
-            DatePreset::Month,
-            DatePreset::Year,
-            DatePreset::Custom,
-        ]
-        .iter()
-        .position(|p| *p == f.date)
-        .unwrap_or(0);
-        parts.push(if f.date == DatePreset::Custom {
-            format!("{} – {}", f.from.trim(), f.to.trim())
-        } else {
-            t.date_presets[i].to_string()
-        });
+        parts.push(date_summary(f, t));
     }
     if f.min_mb > 0.0 || f.max_mb > 0.0 {
-        parts.push(format!(
-            "{}–{} MB",
-            f.min_mb,
-            if f.max_mb > 0.0 {
-                f.max_mb.to_string()
-            } else {
-                "∞".into()
-            }
-        ));
+        parts.push(size_summary(f));
     }
     parts.join("  ·  ")
+}
+
+pub fn type_summary(exts: &BTreeSet<String>) -> String {
+    let labels: Vec<&str> = TYPES
+        .iter()
+        .filter(|c| c.2.iter().any(|e| exts.contains(*e)))
+        .map(|c| c.1)
+        .collect();
+    labels.join(", ")
+}
+
+pub fn date_summary(f: &Find, t: &T) -> String {
+    if f.date == DatePreset::Custom {
+        format!("{} – {}", f.from.trim(), f.to.trim())
+    } else {
+        t.date_presets[DATE_PRESETS.iter().position(|p| *p == f.date).unwrap_or(0)].to_string()
+    }
+}
+
+pub fn size_summary(f: &Find) -> String {
+    format!(
+        "{} – {} MB",
+        f.min_mb,
+        if f.max_mb > 0.0 {
+            f.max_mb.to_string()
+        } else {
+            "∞".into()
+        }
+    )
 }
 
 /// Number of results per canonical extension.
@@ -388,11 +397,111 @@ pub fn ext_counts(files: &[FoundFile]) -> HashMap<String, usize> {
     m
 }
 
+pub fn cat_icon(c: Category) -> &'static str {
+    match c {
+        Category::Image => "🖼",
+        Category::Video => "🎞",
+        Category::Audio => "🎵",
+        Category::Document => "📄",
+        Category::Archive => "📦",
+        Category::Other => "⚙",
+    }
+}
+
+/// Small leading icon of a navigation row.
+#[derive(Clone, Copy)]
+pub enum Mini<'a> {
+    Glyph(&'a str),
+    Folder,
+    Volume,
+    Search,
+    Dot(egui::Color32),
+}
+
+/// Full-width navigation row: label on the left, count on the right.
+pub fn nav_row(
+    ui: &mut egui::Ui,
+    icon: Mini,
+    label: &str,
+    count: Option<usize>,
+    selected: bool,
+) -> egui::Response {
+    let p = pal(ui);
+    let h = 28.0;
+    let (rect, resp) = ui.allocate_exact_size(Vec2::new(ui.available_width(), h), Sense::click());
+    let bg = if selected {
+        Some(p.primary_soft)
+    } else if resp.hovered() {
+        Some(p.faint)
+    } else {
+        None
+    };
+    if let Some(bg) = bg {
+        ui.painter().rect_filled(rect, 6, bg);
+    }
+    let fg = if selected { p.primary } else { p.text };
+    let font = |sz: f32| {
+        egui::FontId::new(
+            sz,
+            egui::FontFamily::Name(if selected { "bold" } else { "semibold" }.into()),
+        )
+    };
+    let mut x = rect.left() + 6.0;
+    let ic = egui::Rect::from_center_size(egui::pos2(x + 8.0, rect.center().y), Vec2::splat(16.0));
+    let painter = ui.painter();
+    match icon {
+        Mini::Glyph(g) => {
+            painter.text(
+                ic.center(),
+                egui::Align2::CENTER_CENTER,
+                g,
+                egui::FontId::proportional(13.0),
+                fg,
+            );
+        }
+        Mini::Folder => theme::paint_drive(painter, ic, theme::DriveIcon::Folder, p),
+        Mini::Volume => theme::paint_drive(painter, ic.expand(1.0), theme::DriveIcon::Partition, p),
+        Mini::Search => crate::home::paint_magnifier(painter, ic.center(), 6.5, fg),
+        Mini::Dot(c) => {
+            painter.rect_filled(
+                egui::Rect::from_center_size(ic.center(), Vec2::splat(10.0)),
+                3,
+                c,
+            );
+        }
+    }
+    x += 22.0;
+    let right = if let Some(n) = count {
+        let r = ui.painter().text(
+            egui::pos2(rect.right() - 6.0, rect.center().y),
+            egui::Align2::RIGHT_CENTER,
+            n.to_string(),
+            egui::FontId::proportional(12.0),
+            if selected { p.primary } else { p.muted },
+        );
+        r.left() - 6.0
+    } else {
+        rect.right() - 6.0
+    };
+    // Elide long names to the space left.
+    let galley = ui
+        .painter()
+        .layout(label.to_string(), font(13.0), fg, f32::INFINITY);
+    let clip =
+        egui::Rect::from_min_max(egui::pos2(x, rect.top()), egui::pos2(right, rect.bottom()));
+    ui.painter().with_clip_rect(clip).galley(
+        egui::pos2(x, rect.center().y - galley.size().y / 2.0),
+        galley,
+        fg,
+    );
+    resp.on_hover_text(label)
+}
+
 // ------------------------------------------------------------ folder tree
 
 #[derive(Default)]
 pub struct Node {
-    count: usize,
+    pub count: usize,
     children: BTreeMap<String, Node>,
 }
 
@@ -419,70 +528,72 @@ pub fn build_tree(files: &[FoundFile], vols: &[Volume]) -> Vec<(u16, String, Nod
         .collect()
 }
 
+struct TreeCtx<'a> {
+    sel: &'a mut Option<(u16, String)>,
+    changed: bool,
+}
+
+fn tree_rec(
+    ui: &mut egui::Ui,
+    cx: &mut TreeCtx,
+    vol: u16,
+    path: &str,
+    name: &str,
+    n: &Node,
+    depth: usize,
+) {
+    let is_sel = cx.sel.as_ref().is_some_and(|(v, p)| *v == vol && p == path);
+    let icon = if depth == 0 {
+        Mini::Volume
+    } else {
+        Mini::Folder
+    };
+    if n.children.is_empty() {
+        ui.horizontal(|ui| {
+            ui.add_space(18.0);
+            if nav_row(ui, icon, name, Some(n.count), is_sel).clicked() {
+                *cx.sel = Some((vol, path.to_string()));
+                cx.changed = true;
+            }
+        });
+        return;
+    }
+    let id = ui.make_persistent_id(("tree", vol, path));
+    // Open the first levels and any single-child chain (Users → Name).
+    let open = depth < 3 || n.children.len() == 1;
+    egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), id, open)
+        .show_header(ui, |ui| {
+            if nav_row(ui, icon, name, Some(n.count), is_sel).clicked() {
+                *cx.sel = Some((vol, path.to_string()));
+                cx.changed = true;
+            }
+        })
+        .body(|ui| {
+            for (child, cn) in &n.children {
+                let p = if path.is_empty() {
+                    child.clone()
+                } else {
+                    format!("{path}/{child}")
+                };
+                tree_rec(ui, cx, vol, &p, child, cn, depth + 1);
+            }
+        });
+}
+
 /// Draw the tree; clicking a folder selects `(volume, path)`.
 pub fn tree_ui(
     ui: &mut egui::Ui,
     roots: &[(u16, String, Node)],
     sel: &mut Option<(u16, String)>,
 ) -> bool {
-    let mut changed = false;
-    #[allow(clippy::too_many_arguments)]
-    fn rec(
-        ui: &mut egui::Ui,
-        vol: u16,
-        path: &str,
-        name: &str,
-        n: &Node,
-        sel: &mut Option<(u16, String)>,
-        changed: &mut bool,
-        depth: usize,
-    ) {
-        let is_sel = sel.as_ref().is_some_and(|(v, p)| *v == vol && p == path);
-        let label = RichText::new(format!(
-            "{} {name}  ({})",
-            if depth == 0 { "💽" } else { "📁" },
-            n.count
-        ));
-        let label = if is_sel {
-            label.strong().color(ACCENT)
-        } else {
-            label
-        };
-        if n.children.is_empty() {
-            ui.horizontal(|ui| {
-                ui.add_space(18.0);
-                if ui.selectable_label(is_sel, label).clicked() {
-                    *sel = Some((vol, path.to_string()));
-                    *changed = true;
-                }
-            });
-            return;
-        }
-        let id = ui.make_persistent_id(("tree", vol, path));
-        // Open the first levels and any single-child chain (Users → Name).
-        let open = depth < 3 || n.children.len() == 1;
-        egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), id, open)
-            .show_header(ui, |ui| {
-                if ui.selectable_label(is_sel, label).clicked() {
-                    *sel = Some((vol, path.to_string()));
-                    *changed = true;
-                }
-            })
-            .body(|ui| {
-                for (child, cn) in &n.children {
-                    let p = if path.is_empty() {
-                        child.clone()
-                    } else {
-                        format!("{path}/{child}")
-                    };
-                    rec(ui, vol, &p, child, cn, sel, changed, depth + 1);
-                }
-            });
-    }
+    let mut cx = TreeCtx {
+        sel,
+        changed: false,
+    };
     for (vol, name, n) in roots {
-        rec(ui, *vol, "", name, n, sel, &mut changed, 0);
+        tree_rec(ui, &mut cx, *vol, "", name, n, 0);
     }
-    changed
+    cx.changed
 }
 
 /// Whether `f` lies in the selected tree folder (or below it).

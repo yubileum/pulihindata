@@ -2,7 +2,7 @@
 
 **Pulih** adalah aplikasi desktop native untuk memulihkan file yang terhapus dari
 hard disk, SSD, flashdisk, dan kartu SD. Ditulis dalam Rust, tanpa runtime atau
-browser tertanam: satu file `.exe` sekitar 8 MB yang langsung jalan.
+browser tertanam: satu file `.exe` sekitar 9 MB yang langsung jalan.
 
 - **Cepat**: pencarian mendalam hanya dibatasi kecepatan disk. Engine-nya
   memproses **~5,8 GB/s** (data dari cache RAM), jauh di atas kecepatan SSD
@@ -14,7 +14,7 @@ browser tertanam: satu file `.exe` sekitar 8 MB yang langsung jalan.
   box MP4, central directory ZIP, dsb.), jadi file hasil pulih tidak terpotong
   dan tidak berisi sampah di akhir.
 
-![Mencari file "skripsi": hasil tersaring, isi dokumen tampil di pratinjau](docs/screenshot.png)
+![Hasil pindaian: navigasi Jalur/Jenis, filter, thumbnail foto, dan pratinjau](docs/screenshot.png)
 
 
 ## Fitur
@@ -29,7 +29,8 @@ browser tertanam: satu file `.exe` sekitar 8 MB yang langsung jalan.
 | **Partisi** | MBR (termasuk partisi extended), GPT (dengan nama partisi), atau volume langsung. Ruang di luar partisi (misalnya partisi yang terhapus) ikut dipindai. |
 | **Pratinjau** | Foto ditampilkan langsung (JPG, PNG, GIF, BMP, WEBP, TIFF) beserta tanggal EXIF dan kamera. Dokumen Office/ODF menampilkan **isi teksnya**, judul, dan tanggal simpan, untuk memastikan "ini file yang saya cari". File lain ditampilkan sebagai teks atau hex. |
 | **Sektor rusak** | Pembacaan tetap berjalan; sektor yang tidak terbaca diisi nol dan dihitung. |
-| **Bahasa** | Indonesia (default) dan Inggris. Tema terang/gelap. |
+| **Tampilan modern** | Navigasi samping, kartu drive dengan bar kapasitas, pintasan Desktop/Dokumen/Gambar/Unduhan, hasil dalam **daftar** atau **thumbnail foto**, panel kiri *Jalur* (pohon folder asal) dan *Jenis* (per kategori & ekstensi), filter Jenis/Tanggal/Ukuran/Kondisi, dan dialog pemulihan yang menuntun. Menyesuaikan diri dengan ukuran jendela. |
+| **Bahasa & tema** | Indonesia (default) dan Inggris. Tema terang (default), gelap, atau mengikuti sistem. |
 
 ### Format yang dikenali pencarian mendalam
 
@@ -48,26 +49,46 @@ browser tertanam: satu file `.exe` sekitar 8 MB yang langsung jalan.
 
 1. Jalankan `pulih.exe`. Windows akan meminta izin Administrator (UAC), karena
    akses disk mentah memerlukannya.
-2. **Pilih drive.** Pilih partisi (mis. `D:` atau kartu SD) untuk hasil
-   tercepat lengkap dengan nama file. Pilih seluruh disk (`Disk 1 — …`) bila
-   partisinya hilang atau terformat. File image (`.img`, `.dd`) juga bisa
-   dibuka atau diseret ke jendela.
-3. **Apa yang dicari? (opsional).** Contoh:
+2. **Pilih lokasi.** Halaman awal menampilkan:
+   - **Drive & partisi** (mis. `C:`, `D:`, kartu SD) lengkap dengan kapasitas.
+     Ini pilihan tercepat dan nama file aslinya ikut kembali.
+   - **Lokasi umum**: Desktop, Dokumen, Gambar, Unduhan, Video, Musik. Pulih
+     memindai drive tempat folder itu berada lalu langsung menampilkan isi
+     folder tersebut.
+   - **Disk fisik** (`Disk 1 — …`) bila partisinya hilang atau terformat.
+   - **Sumber lain**: *Pilih folder…* atau *File image disk* (`.img`, `.dd`).
+     File image juga bisa diseret ke jendela atau dibuka dengan
+     `pulih.exe disk.img`.
+
+   ![Halaman awal: memilih lokasi](docs/beranda.png)
+3. **Mencari file tertentu? (opsional).** Ketik di kotak pencarian, misalnya:
    - `skripsi` → semua file yang nama atau foldernya mengandung "skripsi",
      termasuk dokumen hasil pencarian mendalam yang judulnya mengandung kata itu.
    - `IMG_2024*.jpg` → nama yang persis cocok dengan pola.
-   - Pilih jenis **DOCX** + **PDF**, folder `Kuliah`, tanggal "1 tahun terakhir".
-   Kosongkan bila ingin melihat semua file yang bisa dipulihkan.
 
-   ![Form "Apa yang Anda cari?"](docs/cari-file.png)
-4. **Pilih metode.** *Lengkap* (disarankan), *Cepat* (hanya metadata), atau
-   *Mendalam* (hanya signature).
-5. Klik **Mulai Pindai**. Hasil muncul langsung selama pemindaian berjalan.
-6. Persempit atau ubah pencarian di panel kiri, atau klik folder di pohon
-   **Folder asal**. Klik baris untuk pratinjau, lalu centang file yang
-   diinginkan (tombol <kbd>Spasi</kbd> juga bisa, <kbd>↑</kbd>/<kbd>↓</kbd>
-   untuk berpindah). **Reset pencarian** menampilkan semua hasil lagi.
-7. Isi **Simpan ke** dengan folder di **drive lain**, lalu klik **Pulihkan**.
+   **Filter lanjutan** menambahkan jenis (mis. **DOCX** + **PDF**), folder asal,
+   rentang tanggal, dan ukuran. Kosongkan bila ingin melihat semua file yang
+   bisa dipulihkan.
+
+   ![Mencari "liburan", hanya JPG dan PNG](docs/cari-file.png)
+4. Klik **Pindai**. Metodenya bisa diganti lewat **Opsi**: *Lengkap*
+   (disarankan), *Cepat* (hanya metadata), atau *Mendalam* (hanya signature).
+   Hasil muncul langsung selama pemindaian berjalan, lengkap dengan progres,
+   kecepatan, dan sisa waktu.
+5. **Telusuri hasil.** Panel kiri punya dua tab: **Jalur** (pohon folder asal,
+   plus *Ditemukan lewat signature* per jenis) dan **Jenis** (Foto, Video,
+   Dokumen, … per ekstensi). Di atas daftar ada kotak pencarian dan filter
+   **Jenis / Tanggal / Ukuran / Kondisi**; filter yang aktif tampil biru dan
+   bisa dihapus sekaligus dengan **Hapus filter**. Pilih tampilan **Daftar**
+   atau **Thumbnail**, lalu klik file untuk melihat pratinjau dan detailnya di
+   kanan. Pintasan: <kbd>↑</kbd>/<kbd>↓</kbd> (dan <kbd>←</kbd>/<kbd>→</kbd> di
+   thumbnail) untuk berpindah, <kbd>Spasi</kbd> atau klik ganda untuk
+   mencentang, klik kanan untuk *Pulihkan file ini*.
+6. Centang file yang diinginkan, lalu klik **Pulihkan (N)**. Pilih folder
+   tujuan di **drive lain** dengan *Telusuri…*, lalu **Pulihkan**. Setelah
+   selesai, klik **Lihat file yang dipulihkan**.
+
+   ![Tema gelap: hasil pencarian mendalam dan isi dokumen di pratinjau](docs/gelap.png)
 
 > Hasil pencarian mendalam tidak menyimpan nama, folder, atau (sering) tanggal
 > aslinya. Saat mencari berdasarkan nama/folder/tanggal, file seperti itu tetap
@@ -209,7 +230,14 @@ crates/
     inspect.rs       pratinjau isi dokumen & metadata untuk hasil mana pun
     scan.rs          orkestrasi, progres lock-free, aliran event
     recover.rs       penulisan hasil (berurutan sesuai posisi di disk)
-  pulih-gui/         aplikasi desktop (egui); find.rs = form pencarian & pohon folder
+  pulih-gui/         aplikasi desktop (egui)
+    app.rs           state aplikasi, navigasi samping, halaman Tips
+    home.rs          halaman awal: kartu drive/lokasi, pencarian, bar Pindai
+    results.rs       hasil: progres, panel Jalur/Jenis, filter, daftar & thumbnail, pratinjau
+    dialogs.rs       dialog pemulihan (tujuan, progres, selesai)
+    theme.rs         sistem desain: palet terang/gelap, font, widget & ikon vektor
+    find.rs          kriteria pencarian, pemilih jenis/tanggal/ukuran, pohon folder
+    thumbs.rs        thumbnail foto di latar (pratinjau EXIF untuk JPEG)
   pulih-cli/         antarmuka baris perintah
 scripts/             pengujian end-to-end dengan image filesystem sungguhan
 ```
@@ -233,4 +261,5 @@ Hasil pada versi ini:
 
 ## Lisensi
 
-MIT
+MIT. Antarmuka memakai font [Plus Jakarta Sans](https://github.com/tokotype/PlusJakartaSans)
+(SIL Open Font License 1.1, lihat `crates/pulih-gui/assets/OFL-PlusJakartaSans.txt`).

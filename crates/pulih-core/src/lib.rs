@@ -18,7 +18,9 @@ pub mod target;
 pub mod types;
 pub mod volume;
 
-pub use device::{list_devices, same_disk, Device, DeviceInfo, DeviceKind, MemSource, ReadAt};
+pub use device::{
+    list_devices, locate_folder, same_disk, Device, DeviceInfo, DeviceKind, MemSource, ReadAt,
+};
 pub use inspect::{inspect, Inspection};
 pub use recover::{read_head, recover, RecoverOptions, RecoverProgress, RecoverReport};
 pub use scan::{start_scan, Phase, ScanEvent, ScanHandle, ScanOptions, ScanSummary, Snapshot};

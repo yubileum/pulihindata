@@ -2,10 +2,14 @@
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 
 mod app;
+mod dialogs;
 mod find;
+mod home;
 mod i18n;
 mod preview;
+mod results;
 mod theme;
+mod thumbs;
 
 fn main() -> eframe::Result {
     let options = eframe::NativeOptions {
