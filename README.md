@@ -43,94 +43,159 @@ browser tertanam: satu file `.exe` sekitar 9 MB yang langsung jalan.
 | Arsip | ZIP (termasuk ZIP64 dan data descriptor), RAR 4/5, 7Z, APK, JAR |
 | Lainnya | SQLite, EXE/DLL/SYS (termasuk tabel simbol & sertifikat), ELF |
 
-## Cara memakai
+## Instalasi Langkah demi Langkah (Step-by-Step Installation)
 
-### Windows
+> ⚠ **Penting:** Jangan menginstal atau mengunduh Pulih ke drive yang berisi file yang ingin Anda pulihkan (misalnya jika file hilang di `D:`, instal Pulih di `C:`). Data baru yang ditulis ke drive tersebut dapat menimpa file yang terhapus.
 
-1. Jalankan `pulih.exe`. Windows akan meminta izin Administrator (UAC), karena
-   akses disk mentah memerlukannya.
-2. **Pilih lokasi.** Halaman awal menampilkan:
-   - **Drive & partisi** (mis. `C:`, `D:`, kartu SD) lengkap dengan kapasitas.
-     Ini pilihan tercepat dan nama file aslinya ikut kembali.
-   - **Lokasi umum**: Desktop, Dokumen, Gambar, Unduhan, Video, Musik. Pulih
-     memindai drive tempat folder itu berada lalu langsung menampilkan isi
-     folder tersebut.
-   - **Disk fisik** (`Disk 1 — …`) bila partisinya hilang atau terformat.
-   - **Sumber lain**: *Pilih folder…* atau *File image disk* (`.img`, `.dd`).
-     File image juga bisa diseret ke jendela atau dibuka dengan
-     `pulih.exe disk.img`.
+### Opsi 1: Menggunakan Installer Windows (`Pulih-Setup-1.2.0.exe`) — *Disarankan*
 
-   ![Halaman awal: memilih lokasi](docs/beranda.png)
-3. **Mencari file tertentu? (opsional).** Ketik di kotak pencarian, misalnya:
-   - `skripsi` → semua file yang nama atau foldernya mengandung "skripsi",
-     termasuk dokumen hasil pencarian mendalam yang judulnya mengandung kata itu.
-   - `IMG_2024*.jpg` → nama yang persis cocok dengan pola.
+1. **Unduh atau jalankan file installer:**
+   Buka `dist\Pulih-Setup-1.2.0.exe` (atau unduh dari halaman **Releases** di GitHub).
+2. **Setujui izin Administrator (UAC):**
+   Klik **Yes** saat Windows menanyakan izin Administrator (atau pilih mode instalasi pengguna saat diminta).
+3. **Setujui Lisensi & Pilih Lokasi Instalasi:**
+   - Baca lisensi MIT, pilih *I accept the agreement*, lalu klik **Next**.
+   - Pilih folder instalasi (default: `C:\Program Files\Pulih`), lalu klik **Next**.
+4. **Pilih Tugas Tambahan (Opsional):**
+   - Centang **Create a desktop shortcut** jika ingin ikon pintasan **Pulih** di Desktop.
+   - Centang **Add pulih-cli to PATH** jika ingin menjalankan perintah `pulih-cli` langsung dari PowerShell atau Command Prompt mana pun.
+5. **Selesaikan Instalasi:**
+   Klik **Install**, tunggu proses ekstraksi selesai, lalu klik **Finish** untuk langsung menjalankan aplikasi **Pulih**.
+6. **Cara Menghapus Instalasi (Uninstall):**
+   Buka **Settings → Apps → Installed apps** di Windows, cari **Pulih — Recover Deleted Files**, lalu klik **Uninstall** (atau melalui menu **Start → Pulih → Uninstall Pulih**).
 
-   **Filter lanjutan** menambahkan jenis (mis. **DOCX** + **PDF**), folder asal,
-   rentang tanggal, dan ukuran. Kosongkan bila ingin melihat semua file yang
-   bisa dipulihkan.
+### Opsi 2: Menggunakan File Portabel (`pulih.exe` & `pulih-cli.exe`)
 
-   ![Mencari "liburan", hanya JPG dan PNG](docs/cari-file.png)
-4. Klik **Pindai**. Metodenya bisa diganti lewat **Opsi**: *Lengkap*
-   (disarankan), *Cepat* (hanya metadata), atau *Mendalam* (hanya signature).
-   Hasil muncul langsung selama pemindaian berjalan, lengkap dengan progres,
-   kecepatan, dan sisa waktu.
-5. **Telusuri hasil.** Panel kiri punya dua tab: **Jalur** (pohon folder asal,
-   plus *Ditemukan lewat signature* per jenis) dan **Jenis** (Foto, Video,
-   Dokumen, … per ekstensi). Di atas daftar ada kotak pencarian dan filter
-   **Jenis / Tanggal / Ukuran / Kondisi**; filter yang aktif tampil biru dan
-   bisa dihapus sekaligus dengan **Hapus filter**. Pilih tampilan **Daftar**
-   atau **Thumbnail**, lalu klik file untuk melihat pratinjau dan detailnya di
-   kanan. Pintasan: <kbd>↑</kbd>/<kbd>↓</kbd> (dan <kbd>←</kbd>/<kbd>→</kbd> di
-   thumbnail) untuk berpindah, <kbd>Spasi</kbd> atau klik ganda untuk
-   mencentang, klik kanan untuk *Pulihkan file ini*.
-6. Centang file yang diinginkan, lalu klik **Pulihkan (N)**. Pilih folder
-   tujuan di **drive lain** dengan *Telusuri…*, lalu **Pulihkan**. Setelah
-   selesai, klik **Lihat file yang dipulihkan**.
+Jika Anda ingin menjalankan Pulih langsung dari flashdisk tanpa instalasi:
+1. Salin `target\release\pulih.exe` (dan `target\release\pulih-cli.exe` bila perlu) ke flashdisk atau drive lain.
+2. Klik ganda `pulih.exe` dan setujui permintaan UAC (**Run as Administrator**).
 
-   ![Tema gelap: hasil pencarian mendalam dan isi dokumen di pratinjau](docs/gelap.png)
+---
 
-> Hasil pencarian mendalam tidak menyimpan nama, folder, atau (sering) tanggal
-> aslinya. Saat mencari berdasarkan nama/folder/tanggal, file seperti itu tetap
-> ikut ditampilkan bila jenisnya cocok dengan jenis yang Anda pilih (opsi
-> "Sertakan hasil signature yang jenisnya cocok"), karena bisa jadi itulah file
-> yang Anda cari.
+## Panduan Pengguna (User Guide)
 
-> ⚠ Begitu menyadari ada file terhapus, berhentilah menyimpan apa pun ke drive
-> tersebut. Data baru dapat menimpa file yang ingin dipulihkan.
+### A. Aplikasi Desktop (`pulih`) — Windows & Linux
 
-### Linux
+#### Langkah 1: Buka Aplikasi sebagai Administrator
+- **Windows:** Buka **Pulih** dari Start Menu, pintasan Desktop, atau jalankan `pulih.exe`. Klik **Yes** pada dialog UAC karena pembacaan sektor disk mentah memerlukan hak Administrator.
+- **Linux:** Jalankan dengan `sudo ./pulih` agar aplikasi memiliki akses baca ke `/dev/sdX` atau `/dev/nvmeXnY`.
+- **Mengubah Bahasa & Tema:** Gunakan tombol di pojok kiri bawah bilah samping untuk beralih antara bahasa **Indonesia** / **English** dan tema **Terang** / **Gelap** / **Sistem**.
 
-Akses ke `/dev/sdX` memerlukan root:
+#### Langkah 2: Pilih Lokasi atau Perangkat yang Akan Dipindai
+Pada halaman **Beranda**, pilih sumber tempat file Anda sebelumnya berada:
+- **Drive & Partisi** (mis. `C:`, `D:`, kartu SD, flashdisk): Pilihan tercepat; memulihkan nama file, struktur folder, dan tanggal asli.
+- **Lokasi Umum** (*Desktop*, *Dokumen*, *Gambar*, *Unduhan*, *Video*, *Musik*): Memindai partisi tempat folder tersebut berada lalu otomatis menyaring hasilnya ke folder itu.
+- **Disk Fisik** (`Disk 0`, `Disk 1`, dst.): Gunakan bila partisi terhapus, rusak (*RAW*), atau telah diformat ulang.
+- **Sumber Lain**: Klik **Pilih folder…** untuk fokus pada satu folder tertentu, atau **File image disk** untuk membuka file `.img` / `.dd` (Anda juga bisa menyeret file `.img` langsung ke jendela aplikasi).
 
-```sh
-sudo ./pulih            # GUI
-sudo ./pulih-cli list   # daftar drive
+![Halaman awal: memilih lokasi](docs/beranda.png)
+
+#### Langkah 3: Tentukan File yang Dicari (Opsional)
+Jika Anda mencari file spesifik, isi kolom pencarian sebelum memindai agar proses pemindaian mendalam jauh lebih cepat:
+- **Kata kunci nama / judul:** Ketik misalnya `skripsi` — mencocokkan nama file, nama folder, maupun judul di dalam isi dokumen (Word/PDF) yang ditemukan lewat signature.
+- **Pola wildcard (`*` dan `?`):** Ketik misalnya `IMG_2024*.jpg` atau `Laporan_??.docx` untuk mencocokkan pola nama file secara presisi.
+- **Filter Lanjutan:** Klik **Filter lanjutan** untuk membatasi berdasarkan:
+  - **Jenis file spesifik** (mis. hanya `DOCX` + `PDF`, atau `JPG` + `HEIC` + `CR3`)
+  - **Folder asal** (mis. `Kuliah/Semester5`)
+  - **Rentang tanggal modifikasi** (*Dari tanggal* – *Sampai tanggal*)
+  - **Ukuran file** (* ukuran minimum / maksimum)
+
+> Kosongkan semua filter jika Anda ingin menampilkan seluruh file yang dapat dipulihkan di drive tersebut.
+
+![Mencari "liburan", hanya JPG dan PNG](docs/cari-file.png)
+
+#### Langkah 4: Pilih Mode Pemindaian & Mulai Pindai
+1. Klik tombol **Opsi** di sebelah tombol Pindai bila ingin mengatur metode:
+   - **Lengkap (Disarankan):** Menjalankan pindai cepat metadata filesystem (NTFS/FAT/exFAT) terlebih dahulu, lalu melanjutkan pindai mendalam (*signature carving*) pada ruang kosong.
+   - **Cepat (Metadata saja):** Selesai dalam hitungan detik; cocok untuk file yang baru saja dihapus.
+   - **Mendalam (Signature saja):** Memindai isi sektor demi sektor; cocok untuk drive yang sudah diformat.
+   - **Pindai seluruh ruang disk:** Centang jika ingin memindai seluruh disk termasuk area yang sudah teralokasi.
+2. Klik **Pindai**. Hasil akan langsung muncul secara *real-time* beserta persentase progres, kecepatan baca (`MB/s` atau `GB/s`), dan estimasi waktu selesai (ETA). Anda dapat menjeda atau menghentikan pemindaian kapan saja.
+
+#### Langkah 5: Telusuri, Saring, dan Pratinjau Hasil
+Setelah (atau selama) pemindaian berjalan:
+1. **Navigasi Panel Kiri:**
+   - Tab **Jalur**: Menjelajahi pohon folder asli tempat file dihapus, serta kelompok *Ditemukan lewat signature*.
+   - Tab **Jenis**: Mengelompokkan temuan berdasarkan kategori (*Foto*, *Video*, *Audio*, *Dokumen*, *Arsip*, *Lainnya*) dan per ekstensi.
+2. **Bilah Filter Atas:** Saring hasil kapan saja menurut kata kunci, **Jenis**, **Tanggal**, **Ukuran**, atau **Kondisi** (*Baik*, *Tak pasti*, *Sebagian*, *Tertimpa*). Klik **Hapus filter** untuk mengatur ulang.
+3. **Mode Tampilan & Pratinjau (Panel Kanan):**
+   - Beralih antara tampilan **Daftar** (detail lengkap) dan **Thumbnail** (galeri foto).
+   - Klik sebuah file untuk melihat pratinjaunya di panel kanan: foto ditampilkan penuh beserta info kamera/EXIF, dokumen Office/ODF/PDF menampilkan kutipan isi teks dan judulnya, sedangkan file lain menampilkan pratinjau teks atau heksadesimal.
+   - **Pintasan Keyboard:** Gunakan <kbd>↑</kbd>/<kbd>↓</kbd> (serta <kbd>←</kbd>/<kbd>→</kbd> pada mode Thumbnail) untuk berpindah file, tekan <kbd>Spasi</kbd> atau klik ganda untuk mencentang file, dan klik kanan untuk memilih *Pulihkan file ini*.
+
+#### Langkah 6: Pulihkan File ke Drive Lain
+1. Centang kotak di samping file atau folder yang ingin diselamatkan.
+2. Klik tombol **Pulihkan (N)** di kanan bawah.
+3. Klik **Telusuri…** dan pilih folder tujuan di **drive yang berbeda** dari drive yang sedang dipindai (misalnya memindai `D:`, simpan ke `C:\HasilPulih`).
+4. Klik **Pulihkan**. Setelah selesai, klik **Lihat file yang dipulihkan** untuk membuka folder hasil di File Explorer.
+
+![Tema gelap: hasil pencarian mendalam dan isi dokumen di pratinjau](docs/gelap.png)
+
+> **Catatan tentang hasil pencarian mendalam (*signature*):** File yang ditemukan murni dari signature tidak lagi memiliki metadata nama atau folder asli dari filesystem. Bila file tersebut memiliki judul internal (seperti dokumen Office/PDF atau tag lagu MP3/FLAC), Pulih otomatis menamainya dari judul tersebut; selebihnya diberi nama nomor sektor seperti `f000012345.jpg`.
+
+---
+
+### B. Antarmuka Baris Perintah (`pulih-cli`)
+
+Untuk penggunaan di server, skrip otomatis, atau terminal (jalankan terminal sebagai **Administrator** di Windows atau dengan `sudo` di Linux):
+
+#### 1. Menampilkan Daftar Drive & Partisi
+```powershell
+pulih-cli list
+```
+Contoh keluaran di Windows:
+```text
+\\.\PhysicalDrive0               954 GB  Disk      Disk 0 — NVMe KBG60ZNS1T02
+\\.\PhysicalDrive1               238 GB  Disk      Disk 1 — Card Reader
+\\.\C:                           933 GB  Partition NTFS       C: [Windows]  [C:\]
+\\.\D:                           238 GB  Partition exFAT      D: [Ace Pro]  [D:\]
 ```
 
-### Baris perintah (`pulih-cli`)
+#### 2. Memindai Drive atau Image Disk
+```powershell
+# Pindai partisi D: dan tampilkan daftar semua file yang ditemukan
+pulih-cli scan \\.\D: --list
 
-```sh
-pulih-cli list
-pulih-cli scan \\.\E: --recover F:\hasil          # Windows: volume E:, simpan ke F:
-pulih-cli scan /dev/sdb --types image,video --good-only --recover ~/hasil
+# Pindai cepat (hanya metadata NTFS/FAT/exFAT) dan simpan hasilnya ke C:\Pulih
+pulih-cli scan \\.\D: --quick-only --recover C:\Pulih
+
+# Pindai image disk secara mendalam di seluruh ruang
 pulih-cli scan disk.img --deep-only --all-space --list
 ```
 
-Mencari file tertentu:
+#### 3. Mencari & Memulihkan File Tertentu
+```powershell
+# Cari file yang namanya mengandung "skripsi" di D: dan pulihkan ke E:\Hasil
+pulih-cli scan \\.\D: --name "skripsi" --recover E:\Hasil
 
-```sh
-pulih-cli scan \\.\D: --name "skripsi" --recover E:\hasil
-pulih-cli scan /dev/sdb --name "IMG_2023*" --ext jpg,heic --after 2023-08-01 --before 2023-08-31
+# Cari foto JPG/HEIC dari bulan Agustus 2023 yang kondisinya Baik
+pulih-cli scan \\.\D: --name "IMG_2023*" --ext jpg,heic --after 2023-08-01 --before 2023-08-31 --good-only --recover C:\FotoPulih
+
+# Cari dokumen DOCX dan PDF yang dulunya berada di folder "Kuliah"
 pulih-cli scan disk.img --ext docx,pdf --folder Kuliah --list
 ```
 
-Opsi: `--quick-only`, `--deep-only`, `--all-space` (pindai seluruh perangkat,
-bukan hanya ruang kosong), `--byte-level`, `--types`, `--threads N`,
-`--good-only`, `--min-size BYTES`, `--max-size BYTES`, `--name POLA`,
-`--ext JENIS`, `--folder TEKS`, `--after TTTT-BB-HH`, `--before TTTT-BB-HH`,
-`--strict` (buang hasil signature yang tidak bisa dicek nama/folder/tanggalnya),
-`--list`, `--recover DIR`.
+#### 4. Daftar Lengkap Opsi `pulih-cli scan`
+
+| Opsi | Keterangan |
+|---|---|
+| `--quick-only` | Hanya membaca metadata filesystem (NTFS/FAT/exFAT) |
+| `--deep-only` | Hanya pemindaian mendalam berbasis signature |
+| `--all-space` | Pindai seluruh kapasitas perangkat, bukan hanya ruang kosong |
+| `--byte-level` | Periksa setiap offset byte (lebih lambat; menemukan file yang tertanam di dalam file lain) |
+| `--types DAFTAR` | Filter kategori, dipisahkan koma: `image,video,audio,document,archive,other` |
+| `--ext DAFTAR` | Filter ekstensi spesifik, mis. `docx,pdf` atau `jpg,heic,cr3` |
+| `--name POLA` | Pola nama file (dipisahkan `;`, mendukung wildcard `*` dan `?`) |
+| `--folder TEKS` | Jalur folder asal mengandung `TEKS` |
+| `--after TTTT-BB-HH` | Hanya file yang dimodifikasi pada atau setelah tanggal tersebut |
+| `--before TTTT-BB-HH` | Hanya file yang dimodifikasi sebelum tanggal tersebut |
+| `--min-size BYTES` | Abaikan file yang lebih kecil dari ukuran ini |
+| `--max-size BYTES` | Abaikan file yang lebih besar dari ukuran ini |
+| `--good-only` | Hanya sertakan file yang kondisinya dinilai *Baik* (`Good`) |
+| `--strict` | Buang hasil signature yang tidak memiliki nama/folder/tanggal untuk dicocokkan |
+| `--threads N` | Jumlah thread worker untuk pemindaian mendalam (default: jumlah inti CPU, maks. 8) |
+| `--list` | Cetak setiap file yang ditemukan ke layar (`stdout`) |
+| `--recover DIR` | Pulihkan semua file yang cocok ke direktori `DIR` (harus berada di disk berbeda) |
 
 ## Mengapa cepat
 
@@ -191,16 +256,29 @@ Pada disk sungguhan, pemindaian berjalan pada kecepatan baca disk itu sendiri:
   seperti `f000012345.jpg` (nomor sektor), dikelompokkan per tipe.
 - **ext4/APFS** hanya didukung lewat pencarian mendalam.
 
-## Membangun dari sumber
+## Membangun dari sumber & Membuat Installer
 
 Perlu [Rust](https://rustup.rs) 1.95 atau lebih baru (`rustup update`).
 
+### 1. Membangun Binary Release (Windows / Linux)
+
 ```sh
 cargo build --release
-# hasil: target/release/pulih (GUI) dan target/release/pulih-cli
+# hasil: target/release/pulih (GUI) dan target/release/pulih-cli (CLI)
 ```
 
-Kompilasi silang ke Windows dari Linux:
+### 2. Membuat Installer Windows (`Pulih-Setup-1.2.0.exe`)
+
+Pastikan [Inno Setup 6](https://jrsoftware.org/isinfo.php) sudah terpasang, lalu jalankan skrip pembangun installer dari PowerShell:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\build-installer.ps1
+# hasil: dist\Pulih-Setup-1.2.0.exe
+```
+
+Skrip ini secara otomatis membuat ikon aplikasi (`installer\pulih.ico`), mengompilasi binary release (`pulih.exe` dan `pulih-cli.exe`), lalu membungkusnya menjadi installer Windows menggunakan konfigurasi `installer\pulih.iss`.
+
+### 3. Kompilasi Silang ke Windows dari Linux
 
 ```sh
 rustup target add x86_64-pc-windows-gnu
@@ -239,7 +317,8 @@ crates/
     find.rs          kriteria pencarian, pemilih jenis/tanggal/ukuran, pohon folder
     thumbs.rs        thumbnail foto di latar (pratinjau EXIF untuk JPEG)
   pulih-cli/         antarmuka baris perintah
-scripts/             pengujian end-to-end dengan image filesystem sungguhan
+installer/           konfigurasi Inno Setup (pulih.iss) dan ikon aplikasi (pulih.ico)
+scripts/             skrip pembuatan installer (build-installer.ps1) & pengujian end-to-end
 ```
 
 ## Pengujian
